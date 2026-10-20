@@ -9,6 +9,10 @@ El TV es un Android TV de 32″ con poca memoria (cerca de 1 GB). Todo es revers
 
 ## Reglas
 
+- No uses `-ExecutionPolicy Bypass`: el entorno lo bloquea. Ejecuta los scripts con `powershell -File scripts\x.ps1`.
+  Si Windows dice que el script está bloqueado por venir de internet, quita la marca con
+  `Get-ChildItem -Recurse scripts, tools | Unblock-File`. Si la política de la empresa solo permite
+  scripts firmados, díselo a la persona y detente.
 - No necesitas administrador y no debes pedirlo. Lo único que se crea en el PC es `tools\venv`, `dist\`,
   `inventory\` y `backup\` dentro de esta carpeta. Si hace falta Python, instálalo solo para el usuario.
 - Antes de cambiar nada en el TV, el inventario es de solo lectura.
@@ -35,15 +39,15 @@ El TV es un Android TV de 32″ con poca memoria (cerca de 1 GB). Todo es revers
 
 ### 0. Preparar el PC
 ```
-powershell -ExecutionPolicy Bypass -File scripts\preflight.ps1
-powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
+powershell -File scripts\preflight.ps1
+powershell -File scripts\setup.ps1
 ```
 Si `preflight` dice NO, explica exactamente qué falta y detente. Si no hay Python, instálalo para el
 usuario actual (instalador de python.org con `/quiet InstallAllUsers=0 PrependPath=1`) y repite.
 
 ### 1. Inventario (solo lectura)
 ```
-powershell -ExecutionPolicy Bypass -File scripts\inventory.ps1 -TvHost <IP>
+powershell -File scripts\inventory.ps1 -TvHost <IP>
 ```
 Lee `inventory\<IP>\inventory.txt` y resume: marca y modelo, versión de Android y SDK, espacio libre en `/data`,
 RAM, quién es el launcher actual, quién más reclama Home, dueños del Wi-Fi guardado, y las entradas de TV.
@@ -64,7 +68,7 @@ comentarios que expliquen cada línea). Presenta la tabla (Confirmación 3).
 ### 3. Aplicar la limpieza
 Para cada lote, en orden:
 ```
-powershell -ExecutionPolicy Bypass -File tools\disable.ps1 -TvHost <IP> lists\<lote>.txt
+powershell -File tools\disable.ps1 -TvHost <IP> lists\<lote>.txt
 ```
 Después de cada lote, verifica (sección Verificar). Si algo se rompe, restaura ese lote con
 `tools\restore.ps1 -TvHost <IP> lists\<lote>.txt` y sigue con los demás sin ese paquete.
@@ -72,8 +76,8 @@ En esta etapa el launcher original sigue activo.
 
 ### 4. Instalar el launcher
 ```
-powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
-powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -TvHost <IP>
+powershell -File scripts\setup.ps1
+powershell -File scripts\install.ps1 -TvHost <IP>
 ```
 `install.ps1` descarga el APK de la última release, lo instala, lo arranca, desactiva el launcher original y
 lo deja como inicio. Si no queda como inicio, devuelve el original solo. Anota el nombre del launcher
@@ -95,7 +99,7 @@ Después de cada paso importante:
 
 ### 6. Cerrar
 ```
-powershell -ExecutionPolicy Bypass -File scripts\finish.ps1 -TvHost <IP>
+powershell -File scripts\finish.ps1 -TvHost <IP>
 ```
 Debe decir que el puerto 5555 quedó cerrado. Recuérdale que en el TV puede apagar las Opciones de desarrollador.
 Déjale un resumen corto: qué se desactivó, cómo deshacerlo (`tools\restore.ps1` con cada lote y

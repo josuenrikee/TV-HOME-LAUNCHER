@@ -1,5 +1,5 @@
 # Verifica en 1 minuto si este PC sirve para el proceso. No toca el TV ni instala nada permanente.
-# Uso: powershell -ExecutionPolicy Bypass -File scripts\preflight.ps1 [-TvHost 192.168.1.50]
+# Uso: powershell -File scripts\preflight.ps1 [-TvHost 192.168.1.50]
 param([string]$TvHost = '')
 . "$PSScriptRoot\_common.ps1"
 $ErrorActionPreference = 'Continue'
