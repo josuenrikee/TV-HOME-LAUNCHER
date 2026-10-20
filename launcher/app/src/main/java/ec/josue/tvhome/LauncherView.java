@@ -145,6 +145,7 @@ final class LauncherView extends View {
 
     void onPaused() {
         handler.removeCallbacks(ticker);
+        stopInputWatch();
     }
 
     /** Se pulsó Inicio con el launcher ya abierto. */
@@ -468,22 +469,49 @@ final class LauncherView extends View {
         }
     }
 
+    private TvInputManager tvim = null;
+    private TvInputManager.TvInputCallback inputCb = null;
+
+    private static String stateText(int st) {
+        return st == TvInputManager.INPUT_STATE_DISCONNECTED ? "Sin dispositivo" : "Dispositivo conectado";
+    }
+
+    private void stopInputWatch() {
+        try { if (tvim != null && inputCb != null) tvim.unregisterCallback(inputCb); } catch (Exception ignored) { }
+        inputCb = null;
+    }
+
     private void loadInputs() {
+        stopInputWatch();
         inputs.clear();
         inputNames.clear();
         inputStates.clear();
         try {
             TvInputManager tim = (TvInputManager) host.getSystemService(Context.TV_INPUT_SERVICE);
             if (tim == null) return;
+            tvim = tim;
             for (TvInputInfo info : tim.getTvInputList()) {
                 if (!info.isPassthroughInput()) continue;
                 CharSequence nm = info.loadCustomLabel(host);
                 if (nm == null || nm.length() == 0) nm = info.loadLabel(host);
                 inputs.add(info);
                 inputNames.add(nm == null ? info.getId() : nm.toString());
-                int st = tim.getInputState(info.getId());
-                inputStates.add(st == TvInputManager.INPUT_STATE_DISCONNECTED ? "Sin dispositivo" : "Dispositivo conectado");
+                // Mientras llega el estado real, no afirmamos nada.
+                inputStates.add("Comprobando…");
             }
+            // Sin suscripcion Android devuelve CONNECTED por defecto: hay que registrar el callback
+            // para recibir el estado real de cada entrada.
+            inputCb = new TvInputManager.TvInputCallback() {
+                @Override public void onInputStateChanged(String inputId, int state) {
+                    for (int i = 0; i < inputs.size(); i++) {
+                        if (inputs.get(i).getId().equals(inputId) && i < inputStates.size()) {
+                            inputStates.set(i, stateText(state));
+                        }
+                    }
+                    postInvalidate();
+                }
+            };
+            tim.registerCallback(inputCb, new Handler(Looper.getMainLooper()));
         } catch (Exception ignored) {
             // El TV no deja ver sus entradas a las apps: la pantalla muestra el aviso.
         }
