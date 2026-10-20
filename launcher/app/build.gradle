@@ -1,0 +1,30 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'ec.josue.tvhome'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'ec.josue.tvhome'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // Se instala por ADB, nunca se publica en una tienda: se firma con la llave de depuración
+            // para que pueda reinstalarse encima de una versión anterior.
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
