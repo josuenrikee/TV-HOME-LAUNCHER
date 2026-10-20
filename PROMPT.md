@@ -83,6 +83,18 @@ powershell -File scripts\install.ps1 -TvHost <IP>
 lo deja como inicio. Si no queda como inicio, devuelve el original solo. Anota el nombre del launcher
 original (`Launcher original: ...`), lo necesitarás para deshacer.
 
+**Primera vez: convivencia.** Si la persona quiere probar sin perder el inicio original (es lo recomendable
+en Google TV), instala con `-StockLauncher none`: el launcher original queda activo y el nuevo se fija como
+inicio. El nuevo muestra un botón "Google TV" en la fila inferior para abrir el original. Si el Home del TV
+sigue abriendo el original (tiene prioridad), dilo y ofrece desactivarlo; no lo hagas sin que lo confirme.
+Después de unos días de uso, si todo está bien, se puede repetir `install.ps1` sin esa opción para
+desactivar el original.
+
+**Google TV:** además del launcher (`com.google.android.apps.tv.launcherx`), el asistente de configuración
+(`com.google.android.tungsten.setupwraith`) puede reclamar Home. No lo desactives si es dueño del Wi-Fi
+guardado (el script ya lo comprueba). La cuenta de Google, la Play Store y el asistente de voz no dependen
+del launcher y deben seguir funcionando: pruébalos (botón de micrófono del control remoto).
+
 ### 5. Verificar
 Después de cada paso importante:
 - `tools\tv.py 'dumpsys activity activities | grep topResumedActivity'` (para HDMI y Live TV las capturas salen vacías).

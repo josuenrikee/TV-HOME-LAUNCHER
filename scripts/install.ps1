@@ -65,6 +65,9 @@ Write-Host (Invoke-TvBatch $batch)
 $now = (& $py -I $tv $homeQuery 2>&1 | Out-String).Trim().Split("`n") | Select-Object -Last 1
 $now = ("$now").Trim()
 if ($now -notlike "$Pkg/*") {
+    if ($StockLauncher -eq 'none') {
+        throw "El inicio sigue siendo '$now': ese launcher tiene prioridad mientras esté activo. Nada se desactivó. Para que el nuevo tome el control hay que desactivarlo (repite sin -StockLauncher none); si prefieres dejar ambos, el nuevo queda instalado y se abre desde Todas las apps."
+    }
     if ($StockLauncher -ne 'none') {
         & $py -I $tv "pm enable --user 0 $StockLauncher" | Out-Null
         & $py -I $tv "cmd package set-home-activity --user 0 `$(cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME $StockLauncher | tail -n 1)" | Out-Null

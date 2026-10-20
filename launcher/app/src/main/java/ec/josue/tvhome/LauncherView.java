@@ -46,8 +46,12 @@ final class LauncherView extends View {
     private static final int HOME = 0, ALL = 1, EDIT = 2, PICK = 3, HDMI = 4;
     private static final float W = 1920f, H = 1080f;
     private static final int TXT = 0xFFF6F4F0, MUTED = 0xFF8E8C87, SOFT = 0xFFA8A6A0;
-    private static final String[] TOOLS = {"Todas las apps", "Entradas HDMI", "Editar lista", "Ajustes"};
-    private static final int[] TOOL_ACCENT = {0xFF5B5BD6, 0xFFC77700, 0xFF17A2A2, 0xFF7C5CE0};
+    private static final String[] BASE_TOOLS = {"Todas las apps", "Entradas HDMI", "Editar lista", "Ajustes"};
+    private static final int[] BASE_ACCENT = {0xFF5B5BD6, 0xFFC77700, 0xFF17A2A2, 0xFF7C5CE0};
+    private String[] TOOLS = BASE_TOOLS;
+    private int[] TOOL_ACCENT = BASE_ACCENT;
+    /** Pantalla de inicio del fabricante (p. ej. Google TV), si sigue activa. null cuando está desactivada. */
+    private Intent stockHome = null;
     private static final float[] DIST_ALPHA = {1f, .5f, .22f, .08f};
 
     private final Activity host;
@@ -124,6 +128,7 @@ final class LauncherView extends View {
 
     void onResumed() {
         store.refresh();
+        findStockHome();
         clampSelection();
         if (overlay == 1 || overlay == 2) {
             if (openAnim != null) { openAnim.removeAllListeners(); openAnim.cancel(); }
@@ -151,6 +156,31 @@ final class LauncherView extends View {
         focusPos.set(app);
         toolsDim.set(0f);
         invalidate();
+    }
+
+    /** Busca otra pantalla de inicio activa en el TV y, si existe, agrega el botón para abrirla. */
+    private void findStockHome() {
+        stockHome = null;
+        try {
+            Intent q = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME);
+            for (android.content.pm.ResolveInfo ri : host.getPackageManager().queryIntentActivities(q, 0)) {
+                String pkg = ri.activityInfo.packageName;
+                if (pkg.equals(host.getPackageName()) || pkg.contains("setupwraith") || pkg.contains("provision")
+                    || pkg.equals("com.android.settings") || pkg.equals("com.android.tv.settings")
+                    || ri.activityInfo.name.endsWith("FallbackHome")) continue;
+                stockHome = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                    .setClassName(pkg, ri.activityInfo.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                break;
+            }
+        } catch (Exception ignored) { stockHome = null; }
+        if (stockHome != null) {
+            TOOLS = new String[] {BASE_TOOLS[0], BASE_TOOLS[1], BASE_TOOLS[2], BASE_TOOLS[3], "Google TV"};
+            TOOL_ACCENT = new int[] {BASE_ACCENT[0], BASE_ACCENT[1], BASE_ACCENT[2], BASE_ACCENT[3], 0xFF4285F4};
+        } else {
+            TOOLS = BASE_TOOLS;
+            TOOL_ACCENT = BASE_ACCENT;
+        }
+        if (tool > TOOLS.length - 1) tool = TOOLS.length - 1;
     }
 
     private void tick() {
@@ -226,7 +256,10 @@ final class LauncherView extends View {
         if (t == 0) { go(new Runnable() { @Override public void run() { screen = ALL; } }); }
         else if (t == 1) { go(new Runnable() { @Override public void run() { loadInputs(); hdmiIdx = 0; screen = HDMI; } }); }
         else if (t == 2) { go(new Runnable() { @Override public void run() { editI = 0; editCol = 0; editMoving = false; editScroll.set(0f); screen = EDIT; } }); }
-        else { openSystemSettings(); }
+        else if (t == 3) { openSystemSettings(); }
+        else if (stockHome != null) {
+            try { host.startActivity(stockHome); } catch (Exception e) { toast("No se pudo abrir el inicio del TV"); }
+        }
     }
 
     private void backToHome(final int toolIdx) {
