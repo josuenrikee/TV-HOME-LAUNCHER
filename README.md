@@ -2,7 +2,7 @@
 
 Limpia un TV con Android de anuncios y apps que sobran, y reemplaza su pantalla de inicio por una
 propia: tipografía grande, foco fijo, color por app y una lista que se edita desde el control remoto.
-Hecho para un Innova 32″ de 1 GB de RAM y pensado para repetirse en otros TVs.
+Hecho para un Innova 32″ de 1,5 GB de RAM y pensado para repetirse en otros TVs.
 
 ## Qué incluye
 

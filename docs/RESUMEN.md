@@ -5,7 +5,7 @@ Lo que se hizo en el TV concreto (apps desactivadas, estado actual del equipo) l
 
 ## 1. Objetivo
 
-Un TV Innova 32″ con Google TV (Android 11, 1 GB de RAM) en Guayaquil, con anuncios y apps que sobran. Se quiso:
+Un TV Innova 32″ con Google TV (Android 11, 1,5 GB de RAM) en Guayaquil, con anuncios y apps que sobran. Se quiso:
 
 - Quitar anuncios y bloatware de forma reversible (desactivar, no desinstalar).
 - Reemplazar la pantalla de inicio por una propia, minimalista, tipográfica y rápida.

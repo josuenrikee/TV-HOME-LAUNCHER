@@ -192,3 +192,8 @@ TV 12) the line is `[TclAppBoot] ... calleeComponent = 'com.gathin.tvhome/.HomeK
 (`appops set com.gathin.tvhome APP_AUTO_START allow`) made the service bind on its own after a restart;
 toggling the service off and on in Accessibility works until the next restart. When reporting, give the
 model, build, current user and the relevant redacted lines, not the raw dump.
+
+
+## restore.ps1 en el Innova con Google TV
+
+El valor por defecto de `-Stock` no sirve en este TV. Al restaurar hay que pasar el inicio original: `tools\restore.ps1 -Stock com.google.android.apps.tv.launcherx`.
