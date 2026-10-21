@@ -24,6 +24,7 @@ public class KeyService extends AccessibilityService {
     private static final String ACTION_GLOBAL = "android.intent.action.GLOBAL_BUTTON";
     private static final String ACTION_LAUNCH = "com.google.global_button.ACTION_LAUNCH_APP";
 
+    static volatile KeyService instance;
     private long lastLaunch = 0L;
     private int lastCode = -1;
 
@@ -48,6 +49,7 @@ public class KeyService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        instance = this;
         try {
             IntentFilter f = new IntentFilter();
             f.addAction(ACTION_GLOBAL);
@@ -60,6 +62,7 @@ public class KeyService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
+        if (instance == this) instance = null;
         try { unregisterReceiver(receiver); } catch (Exception ignored) { }
         super.onDestroy();
     }
@@ -87,7 +90,7 @@ public class KeyService extends AccessibilityService {
         return true;
     }
 
-    private void launchPackage(String pkg) {
+    void launchPackage(String pkg) {
         try {
             Intent in = getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
             if (in == null) in = getPackageManager().getLaunchIntentForPackage(pkg);

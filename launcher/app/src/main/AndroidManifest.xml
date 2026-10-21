@@ -64,6 +64,14 @@
             </intent-filter>
         </activity>
 
+        <!-- Aviso de Google para abrir apps desde los botones del control (lo envia el servicio de Realtek). -->
+        <receiver android:name=".LaunchReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.global_button.ACTION_LAUNCH_APP" />
+                <action android:name="android.intent.action.GLOBAL_BUTTON" />
+            </intent-filter>
+        </receiver>
+
         <!-- Respaldo: captura la tecla del boton de ajustes. Se activa por ADB solo si hace falta. -->
         <service
             android:name=".KeyService"
