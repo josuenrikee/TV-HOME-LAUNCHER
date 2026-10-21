@@ -415,7 +415,10 @@ final class LauncherView extends View {
         if (k == LEFT) return Math.max(0, idx - 1);
         if (k == RIGHT) return Math.min(len - 1, idx + 1);
         if (k == UP) return idx - 5 >= 0 ? idx - 5 : idx;
-        if (k == DOWN) return idx + 5 < len ? idx + 5 : idx;
+        if (k == DOWN) {
+            if (idx + 5 < len) return idx + 5;
+            return (idx / 5 < (len - 1) / 5) ? len - 1 : idx;
+        }
         return idx;
     }
 
@@ -665,7 +668,9 @@ final class LauncherView extends View {
                 if (opening || overlay == 2) a = sel ? selA : restA;
                 else a = (overlay == 3) ? restA : 1f;
                 if (opening && sel) { op = 1f; foc = 1f; }
-                drawRow(c, store.pinned.get(i).label, y, foc, TXT, op * a, false, .6f + .4f * cs, cs);
+                float ds = depthScale(dist);
+                float dx = dist < 1f ? 28f * (1f - dist) : -10f * Math.min(dist - 1f, 2f);
+                drawRow(c, store.pinned.get(i).label, y, foc, TXT, op * a, false, (.6f + .4f * cs) * ds, cs * ds, dx);
             }
         }
         c.restore();
@@ -675,7 +680,7 @@ final class LauncherView extends View {
             fill.setShader(null);
             fill.setColor(accent | 0xFF000000);
             fill.setAlpha((int) (255 * barA));
-            rect.set(112f, 492f, 120f, 588f);
+            rect.set(140f, 492f, 148f, 588f);
             c.drawRoundRect(rect, 4f, 4f, fill);
         }
 
@@ -683,18 +688,25 @@ final class LauncherView extends View {
     }
 
     private void drawRow(Canvas c, String label, float top, float foc, int color, float alpha, boolean single) {
-        drawRow(c, label, top, foc, color, alpha, single, 1f, 1f);
+        drawRow(c, label, top, foc, color, alpha, single, 1f, 1f, 0f);
+    }
+
+    /** Tamaño según la distancia al centro: la seleccionada crece un poco y el resto se aleja. */
+    private static float depthScale(float d) {
+        if (d < 1f) return 1.06f + (.86f - 1.06f) * d;
+        if (d < 2f) return .86f + (.72f - .86f) * (d - 1f);
+        return Math.max(.6f, .72f + (.6f - .72f) * (d - 2f));
     }
 
     /** Fila de la lista; sx y sy aplastan el texto para dar el efecto de rueda. */
-    private void drawRow(Canvas c, String label, float top, float foc, int color, float alpha, boolean single, float sx, float sy) {
+    private void drawRow(Canvas c, String label, float top, float foc, int color, float alpha, boolean single, float sx, float sy, float dx) {
         float cy = top + 75f;
         float m = maskAt(cy);
         float aa = alpha * m;
         if (aa <= 0.003f) return;
         float by = 46f;
         c.save();
-        c.translate(160f, cy);
+        c.translate(160f + dx, cy);
         c.scale(sx, sy);
         if (foc < 0.999f) strokeText(c, label, 0f, by, bold, 128f, TXT, .7f * aa * (1f - foc), -.04f);
         if (foc > 0.001f) text(c, label, 0f, by, bold, 128f, color, aa * foc, -.04f, Paint.Align.LEFT);
@@ -873,12 +885,12 @@ final class LauncherView extends View {
     /** Cuadrícula de tarjetas: banner o icono de cada app; el nombre solo se ve en la enfocada. */
     private void drawGrid(Canvas c, List<AppEntry> list, int idx, int topRow, boolean marks) {
         c.save();
-        c.clipRect(0f, 290f, W, 1010f);
-        final float cw = 320f, ch = 180f, step = 344f, rowH = 220f;
+        c.clipRect(0f, 286f, W, 1012f);
+        final float cw = 300f, ch = 169f, step = 349f, rowH = 232f;
         for (int i = 0; i < list.size(); i++) {
             int row = i / 5 - topRow, col = i % 5;
             if (row < 0 || row > 2) continue;
-            float x = 112f + col * step, y = 320f + row * rowH;
+            float x = 112f + col * step, y = 310f + row * rowH;
             boolean on = i == idx;
             AppEntry e = list.get(i);
             AppStore.Card cd = store.cards.get(e.pkg);
@@ -900,7 +912,7 @@ final class LauncherView extends View {
             if (cd != null && cd.banner) {
                 c.drawBitmap(cd.bmp, null, rect, cardPaint);
             } else if (cd != null) {
-                float s2 = 104f;
+                float s2 = 96f;
                 rect.set(x + (cw - s2) / 2f, y + (ch - s2) / 2f, x + (cw + s2) / 2f, y + (ch + s2) / 2f);
                 c.drawBitmap(cd.bmp, null, rect, cardPaint);
             } else {
@@ -920,15 +932,7 @@ final class LauncherView extends View {
             }
             c.restore();
 
-            if (marks && store.isPinned(e)) {
-                fill.setShader(null);
-                fill.setColor(0xFF0A0A0B);
-                fill.setAlpha(255);
-                c.drawCircle(x + cw - 22f, y + 22f, 14f, fill);
-                fill.setColor(e.accent | 0xFF000000);
-                c.drawCircle(x + cw - 22f, y + 22f, 10f, fill);
-            }
-            if (on) text(c, e.label, x, y + ch + 40f, medium, 30f, TXT, 1f, 0f, Paint.Align.LEFT);
+            if (on) text(c, e.label, x, y + ch + 36f, medium, 30f, TXT, 1f, 0f, Paint.Align.LEFT);
         }
         c.restore();
         if (list.size() > 15) {
