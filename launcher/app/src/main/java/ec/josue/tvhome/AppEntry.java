@@ -5,6 +5,8 @@ final class AppEntry {
     final String pkg;
     final String label;
     final int accent;
+    /** Actividad de inicio (para pedir su banner o icono); puede ser null. */
+    String cls;
 
     AppEntry(String pkg, String label, int accent) {
         this.pkg = pkg;

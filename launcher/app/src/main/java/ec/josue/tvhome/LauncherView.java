@@ -10,7 +10,10 @@ import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
@@ -59,6 +62,9 @@ final class LauncherView extends View {
     private final Weather weather;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final TimeInterpolator smooth = new PathInterpolator(.2f, .8f, .2f, 1f);
+    /** Frenado con un leve rebote, como la inercia de una rueda. */
+    private final TimeInterpolator wheel = new PathInterpolator(.34f, 1.45f, .64f, 1f);
+    private static final float WHEEL_STEP = .5f, WHEEL_R = 150f / .5f;
     private final TimeInterpolator flood = new PathInterpolator(.55f, 0f, .15f, 1f);
 
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -129,6 +135,7 @@ final class LauncherView extends View {
 
     void onResumed() {
         store.refresh();
+        startCardLoad();
         findStockHome();
         clampSelection();
         if (overlay == 1 || overlay == 2) {
@@ -142,6 +149,16 @@ final class LauncherView extends View {
         handler.post(ticker);
         if (store.weather) weather.refreshIfStale(new Runnable() { @Override public void run() { invalidate(); } });
         invalidate();
+    }
+
+    private void startCardLoad() {
+        final List<AppEntry> snap = new ArrayList<>(store.installed);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                store.loadCards(snap);
+                postInvalidate();
+            }
+        }, "cards").start();
     }
 
     void onPaused() {
@@ -251,14 +268,14 @@ final class LauncherView extends View {
                 inApps = true;
                 toolsDim.to(0f, 200, LIN);
                 app = homeIndex();
-                focusPos.to(app, 320, smooth);
+                focusPos.to(app, 420, wheel);
             }
             return;
         }
         if (inApps) {
-            if (k == UP && app > 0) { app--; focusPos.to(app, 320, smooth); }
+            if (k == UP && app > 0) { app--; focusPos.to(app, 420, wheel); }
             else if (k == DOWN) {
-                if (app < n - 1) { app++; focusPos.to(app, 320, smooth); }
+                if (app < n - 1) { app++; focusPos.to(app, 420, wheel); }
                 else { inApps = false; toolsDim.to(1f, 200, LIN); }
             } else if (k == OK || k == LONG) {
                 if (store.pinned.isEmpty()) { openPick(); }
@@ -605,7 +622,7 @@ final class LauncherView extends View {
             restA = selA = chromeA = 1f - ret.v;
             barA = (1f - ret.v) * (1f - toolsDim.v);
         }
-        float glowA = (overlay == 1) ? (1f - clamp01(openMs / 260f)) * (1f - toolsDim.v) : barA;
+        float glowA = (overlay == 1) ? (1f - clamp01(openMs / 260f)) * (1f - toolsDim.v) : (overlay == 0 ? 1f - .55f * toolsDim.v : barA);
 
         // brillo de fondo
         if (glowA > 0.001f) {
@@ -633,18 +650,22 @@ final class LauncherView extends View {
             drawRow(c, "Agregar apps", 465f, 1f - toolsDim.v, TXT, 1f, true);
         } else {
             for (int i = 0; i < n; i++) {
-                float dist = Math.abs(i - focusPos.v);
-                float y = 465f + (i - focusPos.v) * 150f;
+                float dd = i - focusPos.v;
+                float dist = Math.abs(dd);
+                float ang = dd * WHEEL_STEP;
+                if (Math.abs(ang) > 1.4f) continue;
+                float cs = (float) Math.cos(ang);
+                float y = 540f + WHEEL_R * (float) Math.sin(ang) - 75f;
                 float op = distAlpha(dist);
                 float opTools = dist < .5f ? .55f : op * .8f;
                 op = op + (opTools - op) * toolsDim.v;
-                float foc = clamp01(1f - dist) * (1f - toolsDim.v);
+                float foc = clamp01(1f - dist);
                 boolean sel = i == app;
                 float a;
                 if (opening || overlay == 2) a = sel ? selA : restA;
                 else a = (overlay == 3) ? restA : 1f;
                 if (opening && sel) { op = 1f; foc = 1f; }
-                drawRow(c, store.pinned.get(i).label, y, foc, TXT, op * a, false);
+                drawRow(c, store.pinned.get(i).label, y, foc, TXT, op * a, false, .6f + .4f * cs, cs);
             }
         }
         c.restore();
@@ -662,13 +683,22 @@ final class LauncherView extends View {
     }
 
     private void drawRow(Canvas c, String label, float top, float foc, int color, float alpha, boolean single) {
+        drawRow(c, label, top, foc, color, alpha, single, 1f, 1f);
+    }
+
+    /** Fila de la lista; sx y sy aplastan el texto para dar el efecto de rueda. */
+    private void drawRow(Canvas c, String label, float top, float foc, int color, float alpha, boolean single, float sx, float sy) {
         float cy = top + 75f;
         float m = maskAt(cy);
         float aa = alpha * m;
         if (aa <= 0.003f) return;
-        float by = cy + 46f;
-        if (foc < 0.999f) strokeText(c, label, 160f, by, bold, 128f, TXT, .7f * aa * (1f - foc), -.04f);
-        if (foc > 0.001f) text(c, label, 160f, by, bold, 128f, color, aa * foc, -.04f, Paint.Align.LEFT);
+        float by = 46f;
+        c.save();
+        c.translate(160f, cy);
+        c.scale(sx, sy);
+        if (foc < 0.999f) strokeText(c, label, 0f, by, bold, 128f, TXT, .7f * aa * (1f - foc), -.04f);
+        if (foc > 0.001f) text(c, label, 0f, by, bold, 128f, color, aa * foc, -.04f, Paint.Align.LEFT);
+        c.restore();
     }
 
     private void drawChrome(Canvas c, int accent, float a) {
@@ -801,7 +831,7 @@ final class LauncherView extends View {
             header(c, "ENTRADAS", "Entradas");
             if (inputs.isEmpty()) {
                 text(c, "El TV no muestra sus entradas a las apps.", 112f, 420f, bold, 56f, SOFT, 1f, -.03f, Paint.Align.LEFT);
-                text(c, "Usa el botón Entrada del control remoto.", 112f, 500f, mono, 28f, MUTED, 1f, .04f, Paint.Align.LEFT);
+                text(c, "Usa el botón Entrada del control remoto.", 112f, 500f, medium, 30f, MUTED, 1f, 0f, Paint.Align.LEFT);
             } else {
                 int cnt = Math.min(inputs.size(), 5);
                 for (int i = 0; i < cnt; i++) {
@@ -830,62 +860,80 @@ final class LauncherView extends View {
         c.drawRoundRect(rect, 4f, 4f, fill);
     }
 
+    private final Path clipPath = new Path();
+    private final Paint cardPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final ColorMatrixColorFilter dimFilter = buildDim();
+
+    private static ColorMatrixColorFilter buildDim() {
+        ColorMatrix m = new ColorMatrix();
+        m.setSaturation(.55f);
+        return new ColorMatrixColorFilter(m);
+    }
+
+    /** Cuadrícula de tarjetas: banner o icono de cada app; el nombre solo se ve en la enfocada. */
     private void drawGrid(Canvas c, List<AppEntry> list, int idx, int topRow, boolean marks) {
         c.save();
-        c.clipRect(0f, 300f, W, 1010f);
-        final float cw = 320f, step = 344f;
+        c.clipRect(0f, 290f, W, 1010f);
+        final float cw = 320f, ch = 180f, step = 344f, rowH = 220f;
         for (int i = 0; i < list.size(); i++) {
             int row = i / 5 - topRow, col = i % 5;
             if (row < 0 || row > 2) continue;
-            float x = 112f + col * step, y = 340f + row * 200f;
+            float x = 112f + col * step, y = 320f + row * rowH;
             boolean on = i == idx;
             AppEntry e = list.get(i);
+            AppStore.Card cd = store.cards.get(e.pkg);
+            int dim = on ? 255 : 150;
+
+            c.save();
+            if (on) c.scale(1.06f, 1.06f, x + cw / 2f, y + ch / 2f);
+            c.save();
+            rect.set(x, y, x + cw, y + ch);
+            clipPath.reset();
+            clipPath.addRoundRect(rect, 10f, 10f, Path.Direction.CW);
+            c.clipPath(clipPath);
+            fill.setShader(null);
+            fill.setColor(lerpColor(0xFF121214, e.accent | 0xFF000000, .32f));
+            fill.setAlpha(dim);
+            c.drawRect(rect, fill);
+            cardPaint.setAlpha(dim);
+            cardPaint.setColorFilter(on ? null : dimFilter);
+            if (cd != null && cd.banner) {
+                c.drawBitmap(cd.bmp, null, rect, cardPaint);
+            } else if (cd != null) {
+                float s2 = 104f;
+                rect.set(x + (cw - s2) / 2f, y + (ch - s2) / 2f, x + (cw + s2) / 2f, y + (ch + s2) / 2f);
+                c.drawBitmap(cd.bmp, null, rect, cardPaint);
+            } else {
+                text(c, e.label, x + cw / 2f, y + ch / 2f + 12f, bold, 36f, TXT, on ? 1f : .6f, -.02f, Paint.Align.CENTER);
+            }
+            cardPaint.setColorFilter(null);
+            c.restore();
             if (on) {
-                Shader sh = cellShaders.get(e.accent);
-                if (sh == null) {
-                    sh = new LinearGradient(0f, 170f, 0f, 0f, withAlpha(e.accent, .22f), withAlpha(e.accent, 0f), Shader.TileMode.CLAMP);
-                    cellShaders.put(e.accent, sh);
-                }
-                c.save();
-                c.translate(x, y);
-                fill.setShader(sh);
-                fill.setAlpha(255);
-                c.drawRect(0f, 0f, cw, 170f, fill);
-                fill.setShader(null);
-                c.restore();
+                p.setShader(null);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(4f);
+                p.setColor(e.accent | 0xFF000000);
+                p.setAlpha(255);
+                rect.set(x + 2f, y + 2f, x + cw - 2f, y + ch - 2f);
+                c.drawRoundRect(rect, 9f, 9f, p);
+                p.setStyle(Paint.Style.FILL);
             }
-            fill.setColor(on ? (e.accent | 0xFF000000) : 0xFFF6F4F0);
-            fill.setAlpha(on ? 255 : 36);
-            c.drawRect(x, y + 164f, x + cw, y + 170f, fill);
-            float a = on ? 1f : .5f;
-            drawCellLabel(c, e.label, x, y, a);
+            c.restore();
+
             if (marks && store.isPinned(e)) {
+                fill.setShader(null);
+                fill.setColor(0xFF0A0A0B);
+                fill.setAlpha(255);
+                c.drawCircle(x + cw - 22f, y + 22f, 14f, fill);
                 fill.setColor(e.accent | 0xFF000000);
-                fill.setAlpha((int) (255 * a));
-                c.drawCircle(x + cw - 14f, y + 18f, 7f, fill);
+                c.drawCircle(x + cw - 22f, y + 22f, 10f, fill);
             }
+            if (on) text(c, e.label, x, y + ch + 40f, medium, 30f, TXT, 1f, 0f, Paint.Align.LEFT);
         }
         c.restore();
         if (list.size() > 15) {
             text(c, (idx + 1) + " / " + list.size(), 1808f, 1050f, medium, 26f, MUTED, 1f, 0f, Paint.Align.RIGHT);
         }
-    }
-
-    /** Nombre de la app en una o dos líneas, sin cortarlo. */
-    private void drawCellLabel(Canvas c, String label, float x, float y, float a) {
-        final float maxW = 312f;
-        if (tw(label, bold, 46f, -.03f) <= maxW) {
-            text(c, label, x, y + 118f, bold, 46f, TXT, a, -.03f, Paint.Align.LEFT);
-            return;
-        }
-        String l1 = label, l2 = "";
-        int cut = -1;
-        for (int i = label.length() - 1; i > 0; i--) {
-            if (label.charAt(i) == ' ' && tw(label.substring(0, i), bold, 40f, -.03f) <= maxW) { cut = i; break; }
-        }
-        if (cut > 0) { l1 = label.substring(0, cut); l2 = label.substring(cut + 1); }
-        text(c, fit(l1, bold, 40f, -.03f, maxW), x, y + 82f, bold, 40f, TXT, a, -.03f, Paint.Align.LEFT);
-        if (!l2.isEmpty()) text(c, fit(l2, bold, 40f, -.03f, maxW), x, y + 128f, bold, 40f, TXT, a, -.03f, Paint.Align.LEFT);
     }
 
     private void drawEdit(Canvas c) {
@@ -926,7 +974,7 @@ final class LauncherView extends View {
                 }
             } else if (right != null) {
                 if (idx >= n + 2) drawSwitch(c, 1808f - 88f, y + 4f, chipOn, a);
-                else text(c, right, 1808f, y + 44f, mono, 24f, SOFT, a, .08f, Paint.Align.RIGHT);
+                else text(c, right, 1808f, y + 44f, medium, 28f, SOFT, a, 0f, Paint.Align.RIGHT);
             }
         }
         c.restore();
@@ -934,7 +982,7 @@ final class LauncherView extends View {
 
     /** Dibuja una etiqueta alineada a la derecha en xRight y devuelve su borde izquierdo. */
     private float chip(Canvas c, String s, float xRight, float y, boolean filled) {
-        float w = tw(s, mono, 22f, .1f) + 36f;
+        float w = tw(s, medium, 26f, 0f) + 40f;
         float x = xRight - w;
         rect.set(x, y, xRight, y + 50f);
         fill.setShader(null);
@@ -947,7 +995,7 @@ final class LauncherView extends View {
             fill.setAlpha(34);
             c.drawRoundRect(rect, 4f, 4f, fill);
         }
-        text(c, s, x + 18f, y + 34f, mono, 22f, filled ? 0xFF0A0A0B : TXT, 1f, .1f, Paint.Align.LEFT);
+        text(c, s, x + 20f, y + 35f, medium, 26f, filled ? 0xFF0A0A0B : TXT, 1f, 0f, Paint.Align.LEFT);
         return x;
     }
 
@@ -958,20 +1006,21 @@ final class LauncherView extends View {
         fill.setColor(TXT);
         fill.setAlpha((int) (255 * a * (on ? 1f : .22f)));
         c.drawRoundRect(rect, 22f, 22f, fill);
-        fill.setColor(on ? 0xFF0A0A0B : TXT);
-        fill.setAlpha((int) (255 * a * (on ? 1f : .75f)));
+        boolean foc = a >= .99f;
+        fill.setColor(on && foc ? 0xFF0A0A0B : TXT);
+        fill.setAlpha((int) (255 * (on ? 1f : .75f)));
         c.drawCircle(on ? x + 88f - 22f : x + 22f, y + 22f, 15f, fill);
     }
 
     private void drawToast(Canvas c) {
-        float w = tw(toastText, mono, 26f, .06f) + 68f;
+        float w = tw(toastText, medium, 28f, 0f) + 68f;
         float x = (W - w) / 2f, y = 880f;
         rect.set(x, y, x + w, y + 64f);
         fill.setShader(null);
         fill.setColor(TXT);
         fill.setAlpha(255);
         c.drawRoundRect(rect, 6f, 6f, fill);
-        text(c, toastText, x + 34f, y + 42f, mono, 26f, 0xFF0A0A0B, 1f, .06f, Paint.Align.LEFT);
+        text(c, toastText, x + 34f, y + 43f, medium, 28f, 0xFF0A0A0B, 1f, 0f, Paint.Align.LEFT);
     }
 
     // ---- utilidades de texto y color

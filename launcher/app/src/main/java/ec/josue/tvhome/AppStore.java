@@ -1,5 +1,6 @@
 package ec.josue.tvhome;
 
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -18,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Lista de apps instaladas, lista fijada en inicio y opciones. Todo se guarda en SharedPreferences. */
 final class AppStore {
@@ -39,6 +41,14 @@ final class AppStore {
     private final PackageManager pm;
     private final SharedPreferences sp;
 
+    /** Imagen de tarjeta de una app: su banner de TV, o su icono si no tiene banner. */
+    static final class Card {
+        final Bitmap bmp;
+        final boolean banner;
+        Card(Bitmap bmp, boolean banner) { this.bmp = bmp; this.banner = banner; }
+    }
+
+    final Map<String, Card> cards = new ConcurrentHashMap<>();
     final List<AppEntry> installed = new ArrayList<>();
     final List<AppEntry> pinned = new ArrayList<>();
     boolean weather;
@@ -64,10 +74,11 @@ final class AppStore {
             List<ResolveInfo> list = pm.queryIntentActivities(q, 0);
             for (ResolveInfo ri : list) {
                 String pkg = ri.activityInfo.packageName;
-                if (pkg.equals(ctx.getPackageName()) || byPkg.containsKey(pkg)) continue;
+                if (pkg.equals(ctx.getPackageName()) || byPkg.containsKey(pkg) || isHidden(pkg, ri.loadLabel(pm))) continue;
                 CharSequence label = ri.loadLabel(pm);
                 String raw0 = label == null ? pkg : label.toString();
-                AppEntry e = new AppEntry(pkg, displayName(raw0), accentFor(pkg, raw0));
+                AppEntry e = new AppEntry(pkg, displayName(pkg, raw0), accentFor(pkg, raw0));
+                e.cls = ri.activityInfo.name;
                 byPkg.put(pkg, e);
                 installed.add(e);
             }
@@ -170,9 +181,44 @@ final class AppStore {
         return sb.toString();
     }
 
-    /** Nombre corto para mostrar: la app de IPTV se llama "Xuper Tv NF", se muestra como "Xuper TV". */
-    private static String displayName(String raw) {
-        return raw.toLowerCase(Locale.ROOT).contains("xuper") ? "Xuper TV" : raw;
+    /** Apps del sistema que no aportan en "todas las apps": ota del control y la pantalla de configuración (ya existe "ajustes"). */
+    private static boolean isHidden(String pkg, CharSequence label) {
+        if (pkg.equals("com.realsil.ota") || pkg.equals("com.android.tv.settings")) return true;
+        return label != null && label.toString().trim().equalsIgnoreCase("ota");
+    }
+
+    /** Nombre corto para mostrar. */
+    private static String displayName(String pkg, String raw) {
+        String l = raw.toLowerCase(Locale.ROOT);
+        if (l.contains("xuper")) return "Xuper TV";
+        if (pkg.startsWith("com.kick")) return "Kick";
+        if (pkg.equals("com.directv.dtvlatam")) return "DirecTV Go";
+        return raw;
+    }
+
+    /** Carga el banner (o icono) de cada app. Se llama fuera del hilo principal. */
+    void loadCards(List<AppEntry> snapshot) {
+        for (AppEntry e : snapshot) {
+            if (cards.containsKey(e.pkg)) continue;
+            try {
+                ComponentName cn = e.cls == null ? null : new ComponentName(e.pkg, e.cls);
+                Drawable d = null;
+                boolean banner = true;
+                if (cn != null) { try { d = pm.getActivityBanner(cn); } catch (Exception ignored) { } }
+                if (d == null) { try { d = pm.getApplicationBanner(e.pkg); } catch (Exception ignored) { } }
+                if (d == null) {
+                    banner = false;
+                    d = cn != null ? pm.getActivityIcon(cn) : pm.getApplicationIcon(e.pkg);
+                }
+                if (d == null) continue;
+                int w = banner ? 320 : 128, h = banner ? 180 : 128;
+                Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                Canvas cv = new Canvas(b);
+                d.setBounds(0, 0, w, h);
+                d.draw(cv);
+                cards.put(e.pkg, new Card(b, banner));
+            } catch (Throwable ignored) { }
+        }
     }
 
     /** Color de acento: tabla de marcas conocidas, luego el color dominante del icono, luego una paleta. */
