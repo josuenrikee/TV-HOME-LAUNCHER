@@ -66,6 +66,7 @@ Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, con foco ini
 | 0.1.12 | Los botones dedicados del control (Ajustes, Entradas/Fuentes, TV, HDMI) los atiende el launcher cuando está en pantalla. |
 | 0.1.13 | Pantalla invisible para el aviso del panel de notificaciones y servicio de accesibilidad de respaldo (solo filtra teclas); con él el engranaje del control abre Ajustes. |
 | 0.1.14 | El servicio también atiende Entradas/Fuentes (KEYCODE_TV_INPUT) y abre la pantalla de Entradas del launcher desde cualquier app. |
+| 0.1.15 | Botones de YouTube, Netflix, Prime Video y YouTube Music del control: el servicio escucha el aviso `GLOBAL_BUTTON` de Realtek y las teclas 3003, 3001, 195 y 3025, y abre cada app. Deja registro en logcat (etiqueta TvHomeKeys). |
 
 ## 6. Problemas encontrados y cómo se resolvieron
 
