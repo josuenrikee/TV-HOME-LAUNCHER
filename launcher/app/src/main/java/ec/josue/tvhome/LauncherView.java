@@ -725,11 +725,11 @@ final class LauncherView extends View {
         boolean ok = clockStr.length() >= 5;
         String hh = ok ? clockStr.substring(0, 2) : "--";
         String mm = ok ? clockStr.substring(3, 5) : "--";
-        final float cx = 1572f, capH = 390f, gap = 24f, top = 150f;
-        text(c, dateStr, cx, 108f, medium, 34f, SOFT, a, 0f, Paint.Align.CENTER);
+        final float cx = 1572f, capH = 390f, gap = 24f, top = 170f;
+        text(c, dateStr, cx, 128f, medium, 34f, SOFT, a, 0f, Paint.Align.CENTER);
         if (clockShader == null || clockKey != accent) {
             clockShader = new LinearGradient(0f, top, 0f, top + 2f * capH + gap,
-                withAlpha(accent, .72f), withAlpha(accent, .22f), Shader.TileMode.CLAMP);
+                withAlpha(accent, .55f), withAlpha(accent, .16f), Shader.TileMode.CLAMP);
             clockKey = accent;
         }
         p.setStyle(Paint.Style.FILL);
@@ -753,12 +753,14 @@ final class LauncherView extends View {
             c.drawCircle(119f, 117f, 7f, fill);
             text(c, greetStr, 144f, 128f, medium, 34f, MUTED, a, 0f, Paint.Align.LEFT);
         }
+        float wifiX = 112f;
         if (store.weather) {
             int t = weather.cached();
             String temp = (t == Weather.NONE ? "--" : String.valueOf(t)) + "°";
             text(c, temp, 112f, 190f, medium, 44f, TXT, a, -.01f, Paint.Align.LEFT);
             float w = tw(temp, medium, 44f, -.01f);
             text(c, " · Guayaquil", 112f + w, 190f, medium, 44f, MUTED, a, -.01f, Paint.Align.LEFT);
+            wifiX = 112f + w + tw(" · Guayaquil", medium, 44f, -.01f);
         }
         drawBigClock(c, accent, a);
 
@@ -780,8 +782,8 @@ final class LauncherView extends View {
                 x += w + 48f;
             }
         }
-        // red: solo el icono, discreto
-        drawWifi(c, 1808f - 30f, 992f, a * .75f, netOk);
+        // red: solo el icono, discreto, a la derecha del clima
+        drawWifi(c, wifiX + 15f, 166f, a * .75f, netOk);
     }
 
     private void drawWifi(Canvas c, float x, float y, float a, boolean ok) {
