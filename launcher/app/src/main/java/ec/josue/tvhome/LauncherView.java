@@ -1420,13 +1420,14 @@ final class LauncherView extends View {
                 }
             } else if (right != null) {
                 if (idx == n + 5) {
-                    if (on) {
-                        float xr = 1808f;
-                        int[] o = AppStore.REST_OPTIONS;
-                        for (int j = o.length - 1; j >= 0; j--) {
-                            xr = chip(c, restLabel(o[j]), xr, y + 8f, o[j] == store.restMin) - 10f;
-                        }
-                    } else text(c, right, 1808f, y + 44f, medium, 28f, SOFT, a, 0f, Paint.Align.RIGHT);
+                    // siempre se ven las seis opciones; la activa va rellena, también con la fila sin enfocar
+                    float xr = 1808f;
+                    int[] o = AppStore.REST_OPTIONS;
+                    for (int j = o.length - 1; j >= 0; j--) {
+                        boolean act = o[j] == store.restMin;
+                        float al = on ? 1f : (act ? .55f : .42f);
+                        xr = chip(c, restLabel(o[j]), xr, y + 8f, act, al) - 10f;
+                    }
                 }
                 else if (idx >= n + 2) drawSwitch(c, 1808f - 88f, y + 4f, chipOn, a);
                 else text(c, right, 1808f, y + 44f, medium, 28f, SOFT, a, 0f, Paint.Align.RIGHT);
@@ -1437,20 +1438,24 @@ final class LauncherView extends View {
 
     /** Dibuja una etiqueta alineada a la derecha en xRight y devuelve su borde izquierdo. */
     private float chip(Canvas c, String s, float xRight, float y, boolean filled) {
+        return chip(c, s, xRight, y, filled, 1f);
+    }
+
+    private float chip(Canvas c, String s, float xRight, float y, boolean filled, float al) {
         float w = tw(s, medium, 26f, 0f) + 40f;
         float x = xRight - w;
         rect.set(x, y, xRight, y + 50f);
         fill.setShader(null);
         if (filled) {
             fill.setColor(TXT);
-            fill.setAlpha(255);
+            fill.setAlpha((int) (255 * al));
             c.drawRoundRect(rect, 4f, 4f, fill);
         } else {
             fill.setColor(TXT);
-            fill.setAlpha(34);
+            fill.setAlpha((int) (34 * al));
             c.drawRoundRect(rect, 4f, 4f, fill);
         }
-        text(c, s, x + 20f, y + 35f, medium, 26f, filled ? 0xFF0A0A0B : TXT, 1f, 0f, Paint.Align.LEFT);
+        text(c, s, x + 20f, y + 35f, medium, 26f, filled ? 0xFF0A0A0B : TXT, filled ? 1f : al, 0f, Paint.Align.LEFT);
         return x;
     }
 
