@@ -48,11 +48,11 @@ import java.util.TimeZone;
  * Ajustes del sistema se abre con el nativo de Android.
  */
 final class LauncherView extends View {
-    private static final int HOME = 0, ALL = 1, EDIT = 2, PICK = 3, HDMI = 4;
+    private static final int HOME = 0, ALL = 1, EDIT = 2, PICK = 3, HDMI = 4, ALARM = 5;
     private static final float W = 1920f, H = 1080f;
     private static final int TXT = 0xFFF6F4F0, MUTED = 0xFF8E8C87, SOFT = 0xFFA8A6A0;
-    private static final String[] BASE_TOOLS = {"Todas las apps", "Entradas", "Editar lista", "Ajustes"};
-    private static final int[] BASE_ACCENT = {0xFF5B5BD6, 0xFFC77700, 0xFF17A2A2, 0xFF7C5CE0};
+    private static final String[] BASE_TOOLS = {"Todas las apps", "Entradas", "Editar lista", "Alarma", "Ajustes"};
+    private static final int[] BASE_ACCENT = {0xFF5B5BD6, 0xFFC77700, 0xFF17A2A2, 0xFFE0A21B, 0xFF7C5CE0};
     private String[] TOOLS = BASE_TOOLS;
     private int[] TOOL_ACCENT = BASE_ACCENT;
     /** Pantalla de inicio del fabricante (p. ej. Google TV), si sigue activa. null cuando está desactivada. */
@@ -329,8 +329,8 @@ final class LauncherView extends View {
             }
         } catch (Exception ignored) { stockHome = null; }
         if (stockHome != null) {
-            TOOLS = new String[] {BASE_TOOLS[0], BASE_TOOLS[1], BASE_TOOLS[2], BASE_TOOLS[3], "Google TV"};
-            TOOL_ACCENT = new int[] {BASE_ACCENT[0], BASE_ACCENT[1], BASE_ACCENT[2], BASE_ACCENT[3], 0xFF4285F4};
+            TOOLS = new String[] {BASE_TOOLS[0], BASE_TOOLS[1], BASE_TOOLS[2], BASE_TOOLS[3], BASE_TOOLS[4], "Google TV"};
+            TOOL_ACCENT = new int[] {BASE_ACCENT[0], BASE_ACCENT[1], BASE_ACCENT[2], BASE_ACCENT[3], BASE_ACCENT[4], 0xFF4285F4};
         } else {
             TOOLS = BASE_TOOLS;
             TOOL_ACCENT = BASE_ACCENT;
@@ -413,6 +413,7 @@ final class LauncherView extends View {
             case ALL: keyAll(k); break;
             case PICK: keyPick(k); break;
             case HDMI: keyHdmi(k); break;
+            case ALARM: keyAlarm(k); break;
             default: keyEdit(k); break;
         }
         invalidate();
@@ -502,7 +503,10 @@ final class LauncherView extends View {
         if (t == 0) { go(new Runnable() { @Override public void run() { screen = ALL; } }); }
         else if (t == 1) { go(new Runnable() { @Override public void run() { loadInputs(); hdmiIdx = 0; screen = HDMI; } }); }
         else if (t == 2) { go(new Runnable() { @Override public void run() { editI = 0; editCol = 0; editMoving = false; editScroll.set(0f); screen = EDIT; } }); }
-        else if (t == 3) { openSystemSettings(); }
+        else if (t == 3) { go(new Runnable() { @Override public void run() {
+            alarmOn = AlarmStore.enabled(host); alarmH = AlarmStore.hour(host); alarmM = AlarmStore.minute(host);
+            alarmRow = 0; alarmCol = 0; alarmEditing = false; screen = ALARM; } }); }
+        else if (t == 4) { openSystemSettings(); }
         else if (stockHome != null) {
             try { host.startActivity(stockHome); } catch (Exception e) { toast("No se pudo abrir el inicio del TV"); }
         }
@@ -549,6 +553,43 @@ final class LauncherView extends View {
         }
         pickIdx = gridMove(k, pickIdx, pickList.size());
         pickTop = gridScroll(pickIdx, pickTop);
+    }
+
+    // --- alarma ---
+    private boolean alarmOn = false, alarmEditing = false;
+    private int alarmH = 6, alarmM = 30, alarmRow = 0, alarmCol = 0;
+
+    private void saveAlarm() { AlarmStore.save(host, alarmOn, alarmH, alarmM); }
+
+    private String alarmWhen() {
+        long t = AlarmStore.nextTrigger(host);
+        long mins = Math.max(0, (t - System.currentTimeMillis()) / 60000L);
+        return "sonará en " + (mins / 60) + " h " + (mins % 60) + " min";
+    }
+
+    private void keyAlarm(int k) {
+        if (alarmEditing) {
+            if (k == UP || k == DOWN) {
+                int d = k == UP ? 1 : -1;
+                if (alarmCol == 0) alarmH = (alarmH + d + 24) % 24;
+                else alarmM = (alarmM + 5 * d + 60) % 60;
+                saveAlarm();
+            } else if (k == LEFT) alarmCol = 0;
+            else if (k == RIGHT) alarmCol = 1;
+            else { alarmEditing = false; if (!alarmOn) { alarmOn = true; saveAlarm(); } }
+            return;
+        }
+        if (k == BACK) { backToHome(3); return; }
+        if (k == UP && alarmRow > 0) alarmRow--;
+        else if (k == DOWN && alarmRow < 2) alarmRow++;
+        else if (k == OK || k == LONG) {
+            if (alarmRow == 0) { alarmOn = !alarmOn; saveAlarm(); }
+            else if (alarmRow == 1) { alarmEditing = true; alarmCol = 0; }
+            else {
+                AlarmStore.once(host, System.currentTimeMillis() + 120000L);
+                toast("Sonará en 2 minutos");
+            }
+        }
     }
 
     private void keyHdmi(int k) {
@@ -1295,9 +1336,45 @@ final class LauncherView extends View {
                     text(c, inputNames.get(i), 112f, y + 74f, bold, 72f, TXT, a, -.035f, Paint.Align.LEFT);
                 }
             }
+        } else if (screen == ALARM) {
+            drawAlarm(c);
         } else {
             drawEdit(c);
         }
+    }
+
+    private void drawAlarm(Canvas c) {
+        header(c, "ALARMA", "Alarma");
+        // fila 0: activar
+        boolean on0 = alarmRow == 0;
+        if (on0) bar(c, 78f, 350f + 10f, 0xFFE0A21B, 8f, 44f);
+        text(c, "Alarma diaria", 112f, 396f, bold, 44f, TXT, on0 ? 1f : .42f, -.035f, Paint.Align.LEFT);
+        drawSwitch(c, 1808f - 88f, 354f, alarmOn, on0 ? 1f : .42f);
+        // fila 1: hora
+        boolean on1 = alarmRow == 1;
+        float a1 = on1 ? 1f : .42f;
+        if (on1) bar(c, 78f, 470f, 0xFFE0A21B, 8f, 150f);
+        String hh = (alarmH < 10 ? "0" : "") + alarmH, mm = (alarmM < 10 ? "0" : "") + alarmM;
+        float w = tw("00", bold, 150f, -.03f), colonW = tw(":", bold, 150f, -.03f);
+        text(c, hh, 112f, 600f, bold, 150f, TXT, a1, -.03f, Paint.Align.LEFT);
+        text(c, ":", 112f + w + 6f, 600f, bold, 150f, TXT, a1 * .6f, -.03f, Paint.Align.LEFT);
+        text(c, mm, 112f + w + colonW + 12f, 600f, bold, 150f, TXT, a1, -.03f, Paint.Align.LEFT);
+        if (alarmEditing) {
+            float ux = alarmCol == 0 ? 112f : 112f + w + colonW + 12f;
+            fill.setShader(null);
+            fill.setColor(0xFFE0A21B);
+            fill.setAlpha(255);
+            rect.set(ux, 622f, ux + w, 630f);
+            c.drawRoundRect(rect, 4f, 4f, fill);
+            text(c, "Arriba y abajo cambian el valor · OK termina", 112f, 690f, medium, 28f, SOFT, 1f, 0f, Paint.Align.LEFT);
+        } else if (on1) {
+            text(c, "OK para cambiar la hora", 112f, 690f, medium, 28f, SOFT, 1f, 0f, Paint.Align.LEFT);
+        }
+        // fila 2: probar
+        boolean on2 = alarmRow == 2;
+        if (on2) bar(c, 78f, 790f + 10f, 0xFFE0A21B, 8f, 44f);
+        text(c, "Probar en 2 minutos", 112f, 836f, bold, 44f, TXT, on2 ? 1f : .42f, -.035f, Paint.Align.LEFT);
+        if (alarmOn) text(c, alarmWhen(), 112f, 920f, medium, 30f, MUTED, 1f, 0f, Paint.Align.LEFT);
     }
 
     private void header(Canvas c, String kicker, String title) {
