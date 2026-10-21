@@ -105,6 +105,7 @@ final class LauncherView extends View {
     private long lastInput = SystemClock.uptimeMillis();
     private float driftX = 0f, driftY = 0f;
     private boolean alarmArmed = false;
+    private long resetArmedUntil = 0L;
     private String alarmTimeStr = "";
     private final MediaWatcher media;
     private final Path ctlPath = new Path();
@@ -653,9 +654,15 @@ final class LauncherView extends View {
                 if (n >= AppStore.MAX_PINNED) toast("Máximo " + AppStore.MAX_PINNED + " apps en inicio");
                 else openPick();
             } else if (editI == n + 1) {
-                store.resetPinned();
-                editI = 0;
-                toast("Lista restablecida");
+                if (SystemClock.uptimeMillis() < resetArmedUntil) {
+                    resetArmedUntil = 0L;
+                    store.resetPinned();
+                    editI = 0;
+                    toast("Lista restablecida");
+                } else {
+                    resetArmedUntil = SystemClock.uptimeMillis() + 3500;
+                    toast("Pulsa OK otra vez para restablecer la lista");
+                }
             } else if (editI == n + 2) store.setWeather(!store.weather);
             else if (editI == n + 3) store.setGreeting(!store.greeting);
             else if (editI == n + 4) store.setAnim(!store.anim);
@@ -1050,6 +1057,23 @@ final class LauncherView extends View {
         drawRestConsole(c, aFull);
     }
 
+    /** Campana pequeña: hay una alarma activa. */
+    private void drawBell(Canvas c, float cx, float cy, float a) {
+        p.setShader(null);
+        p.setStyle(Paint.Style.FILL);
+        p.setColor(MUTED | 0xFF000000);
+        p.setAlpha(Math.max(0, Math.min(255, (int) (a * 255))));
+        rect.set(cx - 8f, cy - 12f, cx + 8f, cy + 4f);
+        ctlPath.reset();
+        ctlPath.addArc(rect, 180f, 180f);
+        ctlPath.lineTo(cx + 11f, cy + 8f);
+        ctlPath.lineTo(cx - 11f, cy + 8f);
+        ctlPath.close();
+        c.drawPath(ctlPath, p);
+        c.drawCircle(cx, cy + 12f, 3.2f, p);
+        c.drawCircle(cx, cy - 13f, 2.2f, p);
+    }
+
     private void drawChromeLeft(Canvas c, int accent, float a) {
         if (a < .003f) return;
         if (store.greeting) {
@@ -1058,6 +1082,10 @@ final class LauncherView extends View {
             fill.setAlpha((int) (255 * a));
             c.drawCircle(119f, 117f, 7f, fill);
             text(c, greetStr, 144f, 128f, medium, 34f, MUTED, a, 0f, Paint.Align.LEFT);
+        }
+        if (alarmArmed) {
+            float bx = store.greeting ? 144f + tw(greetStr, medium, 34f, 0f) + 30f : 124f;
+            drawBell(c, bx, 117f, a * .85f);
         }
         float wifiX = 112f;
         if (store.weather) {
@@ -1586,7 +1614,19 @@ final class LauncherView extends View {
     private static final Locale ES = new Locale("es", "EC");
 
     /** Decisión de diseño: todo el texto del launcher va en minúsculas. */
-    private static String lc(String s) { return s == null ? "" : s.toLowerCase(ES); }
+    private final java.util.HashMap<String, String> lcCache = new java.util.HashMap<>();
+
+    /** Minúsculas con caché: el dibujo repite los mismos textos en cada cuadro y no debe crear cadenas nuevas. */
+    private String lc(String s) {
+        if (s == null) return "";
+        String r = lcCache.get(s);
+        if (r == null) {
+            if (lcCache.size() > 600) lcCache.clear();
+            r = s.toLowerCase(ES);
+            lcCache.put(s, r);
+        }
+        return r;
+    }
 
     private void text(Canvas c, String s, float x, float y, Typeface tf, float size, int rgb, float alpha, float ls, Paint.Align al) {
         s = lc(s);
