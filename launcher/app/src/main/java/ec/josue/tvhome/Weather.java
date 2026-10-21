@@ -18,6 +18,7 @@ import java.net.URL;
  */
 final class Weather {
     static final long TTL_MS = 30L * 60L * 1000L;
+    static final long MAX_AGE_MS = 2L * 60L * 60L * 1000L;
     static final int NONE = Integer.MIN_VALUE;
 
     private static final String URL_STR =
@@ -34,7 +35,10 @@ final class Weather {
 
     /** Última temperatura guardada, o NONE. */
     int cached() {
-        return sp.contains("temp") ? Math.round(sp.getFloat("temp", 0f)) : NONE;
+        if (!sp.contains("temp")) return NONE;
+        long age = System.currentTimeMillis() - sp.getLong("at", 0L);
+        if (age < 0 || age > MAX_AGE_MS) return NONE; // dato viejo: mejor "--" que un número congelado
+        return Math.round(sp.getFloat("temp", 0f));
     }
 
     /** Pide una temperatura nueva si la guardada tiene más de 30 minutos. Avisa en el hilo principal. */

@@ -4,6 +4,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.content.pm.ResolveInfo;
 
 import java.text.Collator;
@@ -165,15 +169,75 @@ final class AppStore {
         return sb.toString();
     }
 
-    private static int accentFor(String pkg, String label) {
-        String l = label.toLowerCase(Locale.ROOT);
+    /** Color de acento: tabla de marcas conocidas, luego el color dominante del icono, luego una paleta. */
+    private int accentFor(String pkg, String label) {
+        int known = knownAccent(pkg, label.toLowerCase(Locale.ROOT));
+        if (known != 0) return known;
+        String key = "ac_" + pkg;
+        if (sp.contains(key)) return sp.getInt(key, 0);
+        int c = 0;
+        try { c = iconAccent(pkg); } catch (Throwable ignored) { }
+        if (c == 0) c = 0xFF000000 | PALETTE[(pkg.hashCode() & 0x7fffffff) % PALETTE.length];
+        sp.edit().putInt(key, c).apply();
+        return c;
+    }
+
+    private static int knownAccent(String pkg, String l) {
         if (pkg.startsWith("com.netflix")) return 0xFFE50914;
-        if (pkg.startsWith("com.google.android.youtube")) return 0xFFFF5A36;
-        if (pkg.startsWith("com.disney")) return 0xFF3D7BFF;
+        if (pkg.equals("com.google.android.youtube.tvmusic") || pkg.startsWith("com.google.android.apps.youtube.music")) return 0xFFFF2D55;
+        if (pkg.startsWith("com.google.android.youtube")) return 0xFFFF3B30;
+        if (pkg.equals("com.wbd.stream") || pkg.startsWith("com.hbo") || l.contains("hbo") || l.equals("max")) return 0xFF6C4CFF;
         if (l.contains("xuper")) return 0xFF1FA866;
-        if (pkg.equals("com.wbd.stream") || l.equals("max")) return 0xFF8A4DFF;
+        if (pkg.startsWith("com.disney")) return 0xFF3D7BFF;
         if (pkg.startsWith("com.amazon.amazonvideo")) return 0xFF00A8E1;
-        int h = pkg.hashCode();
-        return 0xFF000000 | PALETTE[(h & 0x7fffffff) % PALETTE.length];
+        if (pkg.startsWith("com.apple.atve")) return 0xFFC9C9CE;
+        if (pkg.startsWith("com.directv")) return 0xFF0071BA;
+        if (pkg.startsWith("tv.pluto")) return 0xFFFFE400;
+        if (pkg.startsWith("com.kick")) return 0xFF53FC18;
+        if (pkg.startsWith("com.spotify")) return 0xFF1DB954;
+        if (pkg.equals("com.android.mgstxNF")) return 0xFFF2C94C;
+        if (pkg.equals("com.android.tv")) return 0xFF17A2D8;
+        if (pkg.equals("com.android.vending")) return 0xFF34A853;
+        if (pkg.equals("com.android.tv.settings")) return 0xFF7C5CE0;
+        if (pkg.equals("com.rtk.mediabrowser")) return 0xFFF29F05;
+        if (pkg.equals("com.esaba.downloader")) return 0xFF17A2A2;
+        return 0;
+    }
+
+    /** Color dominante y saturado del banner o icono de la app; 0 si no hay uno claro (iconos blancos o grises). */
+    private int iconAccent(String pkg) throws Exception {
+        Drawable d = pm.getApplicationBanner(pkg);
+        if (d == null) d = pm.getApplicationIcon(pkg);
+        if (d == null) return 0;
+        final int w = 48, h = 27;
+        Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        Canvas cv = new Canvas(bmp);
+        d.setBounds(0, 0, w, h);
+        d.draw(cv);
+        float[] hsv = new float[3];
+        float[] wsum = new float[12];
+        float[] rs = new float[12], gs = new float[12], bs = new float[12];
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int px = bmp.getPixel(x, y);
+                if (Color.alpha(px) < 128) continue;
+                Color.colorToHSV(px, hsv);
+                if (hsv[1] < .4f || hsv[2] < .4f) continue;
+                int bin = Math.min(11, (int) (hsv[0] / 30f));
+                float wt = hsv[1] * hsv[2];
+                wsum[bin] += wt;
+                rs[bin] += Color.red(px) * wt;
+                gs[bin] += Color.green(px) * wt;
+                bs[bin] += Color.blue(px) * wt;
+            }
+        }
+        bmp.recycle();
+        int best = 0;
+        for (int i = 1; i < 12; i++) if (wsum[i] > wsum[best]) best = i;
+        if (wsum[best] < 12f) return 0;
+        int r = Math.round(rs[best] / wsum[best]);
+        int g = Math.round(gs[best] / wsum[best]);
+        int b = Math.round(bs[best] / wsum[best]);
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 }
