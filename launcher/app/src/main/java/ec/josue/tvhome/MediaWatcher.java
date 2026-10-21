@@ -15,7 +15,7 @@ import java.util.List;
 
 /** Observa la sesion de multimedia activa (BitChord, Spotify, YouTube Music...) para la consola del inicio. */
 final class MediaWatcher {
-    private static final long KEEP_PAUSED_MS = 10 * 60 * 1000L;
+    private static final long KEEP_PAUSED_MS = 3 * 60 * 1000L;
 
     private final Context ctx;
     private final Runnable onChange;
@@ -175,7 +175,7 @@ final class MediaWatcher {
         }
     }
 
-    /** true si hay algo sonando, o se pauso hace menos de 10 minutos. */
+    /** true si hay algo sonando, o se pauso hace menos de 3 minutos. */
     boolean visible() {
         if (!hasSession) return false;
         if (playing) return true;

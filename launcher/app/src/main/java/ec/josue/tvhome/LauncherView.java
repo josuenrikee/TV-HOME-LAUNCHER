@@ -98,6 +98,12 @@ final class LauncherView extends View {
     private boolean consoleTarget = false, consoleFocus = false, resumed = false;
     private int cBtn = 1;
     private long lastPausedAt = 0L;
+    // --- reposo con reloj ---
+    private final Tween rest = new Tween();
+    private final Tween restMusic = new Tween();
+    private boolean restOn = false, restMusicTarget = false;
+    private long lastInput = SystemClock.uptimeMillis();
+    private float driftX = 0f, driftY = 0f;
     private final MediaWatcher media;
     private final Path ctlPath = new Path();
     private final Matrix artMatrix = new Matrix();
@@ -107,7 +113,7 @@ final class LauncherView extends View {
     private int consoleAcc = 0xFFF6F4F0;
     private final Runnable progTick = new Runnable() {
         @Override public void run() {
-            if (resumed && screen == HOME && consoleA.v > .01f && media.playing) invalidate();
+            if (resumed && screen == HOME && consoleA.v > .01f && media.playing && !(restOn && rest.v > .99f)) invalidate();
             handler.postDelayed(this, 1000);
         }
     };
@@ -162,6 +168,8 @@ final class LauncherView extends View {
     // ------------------------------------------------------------------ ciclo de vida
 
     void onResumed() {
+        lastInput = SystemClock.uptimeMillis();
+        if (restOn && SystemClock.uptimeMillis() - lastPausedAt > 1500) { restOn = false; rest.set(0f); }
         store.refresh();
         startCardLoad();
         findStockHome();
@@ -209,6 +217,8 @@ final class LauncherView extends View {
     /** Se pulsó Inicio: siempre vuelve a la primera app de la lista, con suavidad. */
     void onHomePressed() {
         if (overlay == 1) return;
+        lastInput = SystemClock.uptimeMillis();
+        if (restOn) leaveRest();
         final int first = homeIndex();
         editMoving = false;
         if (consoleFocus) { consoleFocus = false; cFocus.to(0f, 200, LIN); }
@@ -261,11 +271,35 @@ final class LauncherView extends View {
             consoleFocus = false;
             cFocus.to(0f, 200, LIN);
         }
+        boolean pl = media.hasSession && media.playing;
+        if (pl != restMusicTarget) {
+            restMusicTarget = pl;
+            restMusic.to(pl ? 1f : 0f, 450, smooth);
+        }
+    }
+
+    /** Pasa al reposo: la lista y los datos salen y el reloj se desliza al centro. */
+    private void enterRest() {
+        if (restOn) return;
+        restOn = true;
+        consoleFocus = false;
+        cFocus.set(0f);
+        rest.to(1f, 1100, smooth);
+    }
+
+    /** Sale del reposo: todo vuelve a su lugar. */
+    private void leaveRest() {
+        if (!restOn) return;
+        restOn = false;
+        lastInput = SystemClock.uptimeMillis();
+        rest.to(0f, 750, smooth);
     }
 
     /** Lo pide el servicio de teclas al pulsar Entradas/Fuentes del control, desde cualquier app. */
     void openInputsFromKey() {
         if (overlay == 1) return;
+        lastInput = SystemClock.uptimeMillis();
+        if (restOn) { restOn = false; rest.set(0f); }
         editMoving = false;
         consoleFocus = false;
         cFocus.set(0f);
@@ -306,9 +340,22 @@ final class LauncherView extends View {
 
     private void tick() {
         Date now = new Date();
+        String oldClock = clockStr, oldDate = dateStr;
         clockStr = fmtClock.format(now);
         syncConsole();
         dateStr = fmtDate.format(now);
+        if (clockStr.length() >= 5) {
+            int mi = 0;
+            try { mi = Integer.parseInt(clockStr.substring(3, 5)); } catch (NumberFormatException ignored) { }
+            // desplazamiento mínimo del reloj de reposo, para no marcar siempre los mismos píxeles
+            driftX = ((mi % 5) - 2) * 4f;
+            driftY = (((mi / 5) % 5) - 2) * 4f;
+        }
+        if (!restOn && resumed && screen == HOME && overlay == 0 && store.restMin > 0
+            && SystemClock.uptimeMillis() - lastInput >= store.restMin * 60000L) {
+            enterRest();
+        }
+        if (restOn && rest.v > .99f && clockStr.equals(oldClock) && dateStr.equals(oldDate)) return;
         int h = 12;
         try { h = Integer.parseInt(fmtHour.format(now)); } catch (NumberFormatException ignored) { }
         greetStr = (h >= 5 && h < 12) ? "Buenos días" : ((h >= 12 && h < 19) ? "Buenas tardes" : "Buenas noches");
@@ -320,13 +367,20 @@ final class LauncherView extends View {
     private void clampSelection() {
         int n = Math.max(1, store.pinned.size());
         if (app > n - 1) { app = n - 1; focusPos.set(app); }
-        int total = store.pinned.size() + 5;
+        int total = store.pinned.size() + 6;
         if (editI > total - 1) editI = total - 1;
     }
 
     // ------------------------------------------------------------------ entrada de teclas
 
     boolean onKey(int keyCode, boolean longPress) {
+        lastInput = SystemClock.uptimeMillis();
+        if (restOn) {
+            // En reposo cualquier tecla solo despierta: no se ejecuta nada más.
+            leaveRest();
+            invalidate();
+            return true;
+        }
         // Botones dedicados del control: como el inicio de Google TV esta desactivado, los atiende el launcher
         boolean wantSettings = keyCode == KeyEvent.KEYCODE_SETTINGS;
         boolean wantInputs = keyCode == KeyEvent.KEYCODE_TV_INPUT || keyCode == KeyEvent.KEYCODE_TV
@@ -507,7 +561,7 @@ final class LauncherView extends View {
 
     private void keyEdit(int k) {
         int n = store.pinned.size();
-        int last = n + 4;
+        int last = n + 5;
         if (k == BACK) {
             if (editMoving) { editMoving = false; return; }
             backToHome(2);
@@ -517,6 +571,11 @@ final class LauncherView extends View {
             if (k == UP && editI > 0) { store.swap(editI, editI - 1); editI--; }
             else if (k == DOWN && editI < n - 1) { store.swap(editI, editI + 1); editI++; }
             else if (k == OK || k == LONG) editMoving = false;
+            focusEdit();
+            return;
+        }
+        if (editI == n + 5 && (k == LEFT || k == RIGHT)) {
+            cycleRest(k == RIGHT ? 1 : -1, false);
             focusEdit();
             return;
         }
@@ -543,11 +602,26 @@ final class LauncherView extends View {
                 toast("Lista restablecida");
             } else if (editI == n + 2) store.setWeather(!store.weather);
             else if (editI == n + 3) store.setGreeting(!store.greeting);
-            else store.setAnim(!store.anim);
+            else if (editI == n + 4) store.setAnim(!store.anim);
+            else cycleRest(1, true);
             if (store.weather) weather.refreshIfStale(new Runnable() { @Override public void run() { invalidate(); } });
         }
         focusEdit();
     }
+
+    /** Cambia el tiempo de reposo entre apagado, 5, 10, 15, 30 y 60 minutos. */
+    private void cycleRest(int dir, boolean wrap) {
+        int[] o = AppStore.REST_OPTIONS;
+        int i = 0;
+        for (int j = 0; j < o.length; j++) if (o[j] == store.restMin) i = j;
+        i += dir;
+        if (i < 0) i = wrap ? o.length - 1 : 0;
+        if (i > o.length - 1) i = wrap ? 0 : o.length - 1;
+        store.setRestMin(o[i]);
+        lastInput = SystemClock.uptimeMillis();
+    }
+
+    private static String restLabel(int m) { return m == 0 ? "Apagado" : m + " min"; }
 
     private void openPick() {
         go(new Runnable() {
@@ -781,6 +855,9 @@ final class LauncherView extends View {
             barA = (1f - ret.v) * (1f - toolsDim.v) * (1f - cFocus.v);
         }
         float glowA = (overlay == 1) ? (1f - clamp01(openMs / 260f)) * (1f - toolsDim.v) : (overlay == 0 ? 1f - .55f * toolsDim.v : barA);
+        final float lf = 1f - clamp01(rest.v * 1.5f);   // lo que sale en el reposo
+        glowA *= lf;
+        barA *= lf;
 
         // brillo de fondo
         if (glowA > 0.001f) {
@@ -803,9 +880,12 @@ final class LauncherView extends View {
 
         // lista de apps
         c.save();
+        c.translate(-300f * rest.v, 0f);
         c.clipRect(0f, 0f, 1400f, H);
-        if (n == 0) {
-            drawRow(c, "Agregar apps", 465f, 1f - toolsDim.v, TXT, 1f, true);
+        if (lf < .003f) {
+            // en reposo la lista no se dibuja
+        } else if (n == 0) {
+            drawRow(c, "Agregar apps", 465f, 1f - toolsDim.v, TXT, lf, true);
         } else {
             for (int i = 0; i < n; i++) {
                 float dd = i - focusPos.v;
@@ -816,7 +896,7 @@ final class LauncherView extends View {
                 float op = distAlpha(dist);
                 float opTools = dist < .5f ? .55f : op * .8f;
                 op = op + (opTools - op) * toolsDim.v;
-                op *= 1f - .6f * cFocus.v;
+                op *= (1f - .6f * cFocus.v) * lf;
                 float foc = clamp01(1f - dist);
                 boolean sel = i == app;
                 float a;
@@ -870,18 +950,23 @@ final class LauncherView extends View {
 
     private Shader clockShader = null;
     private int clockKey = 0;
+    private float clockR = -1f, clockTop = -1f;
 
     /** Hora grande apilada (hh sobre mm) a la derecha, con degradado del color de la app; la fecha va centrada encima. */
     private void drawBigClock(Canvas c, int accent, float a) {
         boolean ok = clockStr.length() >= 5;
         String hh = ok ? clockStr.substring(0, 2) : "--";
         String mm = ok ? clockStr.substring(3, 5) : "--";
-        final float cx = 1572f, capH = 390f, gap = 24f, top = 170f;
-        text(c, dateStr, cx, 128f, medium, 34f, SOFT, a, 0f, Paint.Align.CENTER);
-        if (clockShader == null || clockKey != accent) {
+        final float r = rest.v;
+        final float cx = 1572f + (960f - 1572f) * r + driftX * r;
+        final float capH = 390f + 23f * r, gap = 24f + r, top = 170f - 9f * r + driftY * r;
+        text(c, dateStr, cx, 128f - 11f * r + driftY * r, medium, 34f, SOFT, a, 0f, Paint.Align.CENTER);
+        if (clockShader == null || clockKey != accent || clockR != r || clockTop != top) {
             clockShader = new LinearGradient(0f, top, 0f, top + 2f * capH + gap,
                 withAlpha(accent, .55f), withAlpha(accent, .16f), Shader.TileMode.CLAMP);
             clockKey = accent;
+            clockR = r;
+            clockTop = top;
         }
         p.setStyle(Paint.Style.FILL);
         p.setTypeface(clockFace);
@@ -896,7 +981,19 @@ final class LauncherView extends View {
         p.setShader(null);
     }
 
-    private void drawChrome(Canvas c, int accent, float a) {
+    private void drawChrome(Canvas c, int accent, float aFull) {
+        float lf = 1f - clamp01(rest.v * 1.5f);
+        float a = aFull * lf;
+        c.save();
+        c.translate(-120f * rest.v, 0f);
+        drawChromeLeft(c, accent, a);
+        c.restore();
+        drawBigClock(c, accent, aFull);
+        drawRestConsole(c, aFull);
+    }
+
+    private void drawChromeLeft(Canvas c, int accent, float a) {
+        if (a < .003f) return;
         if (store.greeting) {
             fill.setShader(null);
             fill.setColor(accent | 0xFF000000);
@@ -913,7 +1010,6 @@ final class LauncherView extends View {
             text(c, " · Guayaquil", 112f + w, 190f, medium, 44f, MUTED, a, -.01f, Paint.Align.LEFT);
             wifiX = 112f + w + tw(" · Guayaquil", medium, 44f, -.01f);
         }
-        drawBigClock(c, accent, a);
         drawConsole(c, a);
 
         // fila inferior: oculta mientras se exploran las apps, aparece al bajar del final de la lista
@@ -970,36 +1066,7 @@ final class LauncherView extends View {
             c.drawRoundRect(rect, 22f, 22f, p);
             p.setStyle(Paint.Style.FILL);
         }
-        // portada
-        rect.set(x0, cy0, x0 + cs, cy0 + cs);
-        android.graphics.Bitmap art = media.art;
-        if (art != null) {
-            if (artShader == null || artShaderBmp != art) {
-                artShader = new BitmapShader(art, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-                artShaderBmp = art;
-            }
-            artMatrix.setScale(cs / art.getWidth(), cs / art.getHeight());
-            artMatrix.postTranslate(x0, cy0);
-            artShader.setLocalMatrix(artMatrix);
-            fill.setColor(0xFFFFFFFF);
-            fill.setShader(artShader);
-            fill.setAlpha((int) (255 * ca));
-            c.drawRoundRect(rect, 12f, 12f, fill);
-            fill.setShader(null);
-        } else {
-            fill.setShader(null);
-            fill.setColor(ac | 0xFF000000);
-            fill.setAlpha((int) (255 * ca * .9f));
-            c.drawRoundRect(rect, 12f, 12f, fill);
-            p.setShader(null);
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(5f);
-            p.setColor(0xFF0A0A0B);
-            p.setAlpha((int) (255 * ca * .55f));
-            c.drawCircle(x0 + cs / 2f, cy, 24f, p);
-            p.setStyle(Paint.Style.FILL);
-            c.drawCircle(x0 + cs / 2f, cy, 6f, p);
-        }
+        drawCover(c, x0, cy0, cs, 12f, ca, ac);
         // texto
         final float tx = x0 + cs + 24f, tw0 = 340f;
         text(c, fit(media.title, bold, 36f, -.02f, tw0), tx, 132f, bold, 36f, TXT, ca, -.02f, Paint.Align.LEFT);
@@ -1021,6 +1088,52 @@ final class LauncherView extends View {
         drawCtl(c, 0, 1062f, cy, 32f, ca, consoleFocus && cBtn == 0, ac);
         drawCtl(c, 1, 1146f, cy, 36f, ca, consoleFocus && cBtn == 1, ac);
         drawCtl(c, 2, 1230f, cy, 32f, ca, consoleFocus && cBtn == 2, ac);
+    }
+
+    /** Portada del álbum (o un marcador de color si la app no la entrega). */
+    private void drawCover(Canvas c, float x0, float y0, float cs, float rad, float ca, int ac) {
+        rect.set(x0, y0, x0 + cs, y0 + cs);
+        android.graphics.Bitmap art = media.art;
+        if (art != null) {
+            if (artShader == null || artShaderBmp != art) {
+                artShader = new BitmapShader(art, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                artShaderBmp = art;
+            }
+            artMatrix.setScale(cs / art.getWidth(), cs / art.getHeight());
+            artMatrix.postTranslate(x0, y0);
+            artShader.setLocalMatrix(artMatrix);
+            fill.setColor(0xFFFFFFFF);
+            fill.setShader(artShader);
+            fill.setAlpha((int) (255 * ca));
+            c.drawRoundRect(rect, rad, rad, fill);
+            fill.setShader(null);
+        } else {
+            float k = cs / 96f;
+            fill.setShader(null);
+            fill.setColor(ac | 0xFF000000);
+            fill.setAlpha((int) (255 * ca * .9f));
+            c.drawRoundRect(rect, rad, rad, fill);
+            p.setShader(null);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(5f * k);
+            p.setColor(0xFF0A0A0B);
+            p.setAlpha((int) (255 * ca * .55f));
+            c.drawCircle(x0 + cs / 2f, y0 + cs / 2f, 24f * k, p);
+            p.setStyle(Paint.Style.FILL);
+            c.drawCircle(x0 + cs / 2f, y0 + cs / 2f, 6f * k, p);
+        }
+    }
+
+    /** En reposo, con música sonando: portada, título y artista abajo a la izquierda, sin controles. */
+    private void drawRestConsole(Canvas c, float a) {
+        float ra = a * rest.v * restMusic.v;
+        if (ra < .004f) return;
+        int ac = consoleAccent();
+        final float x0 = 75f, y0 = 912f, cs = 90f;
+        drawCover(c, x0, y0, cs, 12f, ra, ac);
+        final float tx = x0 + cs + 24f;
+        text(c, fit(media.title, bold, 30f, -.02f, 520f), tx, y0 + 40f, bold, 30f, TXT, ra, -.02f, Paint.Align.LEFT);
+        text(c, fit(media.artist, medium, 24f, 0f, 520f), tx, y0 + 74f, medium, 24f, SOFT, ra, 0f, Paint.Align.LEFT);
     }
 
     private void drawCtl(Canvas c, int kind, float cx, float cy, float r, float ca, boolean foc, int ac) {
@@ -1273,7 +1386,7 @@ final class LauncherView extends View {
         int n = store.pinned.size();
         c.save();
         c.clipRect(0f, 235f, W, 985f);
-        for (int idx = 0; idx < n + 5; idx++) {
+        for (int idx = 0; idx < n + 6; idx++) {
             float y = editRowTop(idx) - editScroll.v;
             if (y < 170f || y > 1000f) continue;
             boolean on = idx == editI;
@@ -1287,7 +1400,8 @@ final class LauncherView extends View {
             else if (idx == n + 1) { label = "Restablecer lista"; right = null; }
             else if (idx == n + 2) { label = "Clima en inicio"; chipOn = store.weather; right = chipOn ? "Activado" : "Apagado"; }
             else if (idx == n + 3) { label = "Saludo según la hora"; chipOn = store.greeting; right = chipOn ? "Activado" : "Apagado"; }
-            else { label = "Efecto de apertura"; chipOn = store.anim; right = chipOn ? "Activado" : "Apagado"; }
+            else if (idx == n + 4) { label = "Efecto de apertura"; chipOn = store.anim; right = chipOn ? "Activado" : "Apagado"; }
+            else { label = "Reposo con reloj"; right = restLabel(store.restMin); }
             if (on) bar(c, 78f, y + 10f, accent, 8f, 44f);
             float tx = 112f;
             if (idx < n) {
@@ -1305,7 +1419,16 @@ final class LauncherView extends View {
                     chip(c, "MOVER", x2 - 14f, y + 8f, editCol == 0);
                 }
             } else if (right != null) {
-                if (idx >= n + 2) drawSwitch(c, 1808f - 88f, y + 4f, chipOn, a);
+                if (idx == n + 5) {
+                    if (on) {
+                        float xr = 1808f;
+                        int[] o = AppStore.REST_OPTIONS;
+                        for (int j = o.length - 1; j >= 0; j--) {
+                            xr = chip(c, restLabel(o[j]), xr, y + 8f, o[j] == store.restMin) - 10f;
+                        }
+                    } else text(c, right, 1808f, y + 44f, medium, 28f, SOFT, a, 0f, Paint.Align.RIGHT);
+                }
+                else if (idx >= n + 2) drawSwitch(c, 1808f - 88f, y + 4f, chipOn, a);
                 else text(c, right, 1808f, y + 44f, medium, 28f, SOFT, a, 0f, Paint.Align.RIGHT);
             }
         }

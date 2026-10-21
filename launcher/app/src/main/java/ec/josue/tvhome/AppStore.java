@@ -32,6 +32,8 @@ final class AppStore {
     private static final String KEY_WEATHER = "weather";
     private static final String KEY_GREETING = "greeting";
     private static final String KEY_ANIM = "anim";
+    private static final String KEY_REST = "rest_min";
+    static final int[] REST_OPTIONS = {0, 5, 10, 15, 30, 60};
 
     private static final int[] PALETTE = {
         0x3D7BFF, 0x1FA866, 0x8A4DFF, 0x00A8E1, 0xF2C94C, 0xF29F05, 0xFF8A00, 0xD14DFF, 0x17A2D8, 0x34A8A0
@@ -54,6 +56,8 @@ final class AppStore {
     boolean weather;
     boolean greeting;
     boolean anim;
+    /** Minutos sin tocar el control para pasar al reposo con reloj (0 = apagado). */
+    int restMin;
 
     AppStore(Context ctx) {
         this.ctx = ctx;
@@ -62,6 +66,7 @@ final class AppStore {
         weather = sp.getBoolean(KEY_WEATHER, true);
         greeting = sp.getBoolean(KEY_GREETING, true);
         anim = sp.getBoolean(KEY_ANIM, true);
+        restMin = sp.getInt(KEY_REST, 10);
     }
 
     /** Vuelve a leer las apps instaladas y reconstruye la lista fijada (omite lo desinstalado o desactivado). */
@@ -168,6 +173,7 @@ final class AppStore {
 
     void setWeather(boolean v) { weather = v; sp.edit().putBoolean(KEY_WEATHER, v).apply(); }
     void setGreeting(boolean v) { greeting = v; sp.edit().putBoolean(KEY_GREETING, v).apply(); }
+    void setRestMin(int v) { restMin = v; sp.edit().putInt(KEY_REST, v).apply(); }
     void setAnim(boolean v) { anim = v; sp.edit().putBoolean(KEY_ANIM, v).apply(); }
 
     /** Intent para abrir la app: primero la versión de TV, luego la normal. */
