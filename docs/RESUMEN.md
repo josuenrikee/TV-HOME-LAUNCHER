@@ -69,6 +69,7 @@ Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, con foco ini
 | 0.1.15 | Botones de YouTube, Netflix, Prime Video y YouTube Music del control: el servicio escucha el aviso `GLOBAL_BUTTON` de Realtek y las teclas 3003, 3001, 195 y 3025, y abre cada app. Deja registro en logcat (etiqueta TvHomeKeys). Resultado: las teclas no llegan a Android; se quedan en el servicio de Realtek. |
 | 0.1.16 | Receptor declarado en el manifiesto para `ACTION_LAUNCH_APP` (experimento). Resultado: no llegó nada; el `sendBroadcast` que se veía era `ACTION_HIDE_STORE_WINDOW` de Realtek hacia el modo tienda. |
 | 0.1.17 | Prioridad 1000 en el filtro HOME del launcher (experimento para convivir con `launcherx` activo; el rol HOME ya lo tenía y no bastó). Resultado: Android deja la prioridad en 0 para apps que no son del sistema. |
+| 0.1.18 | BitChord (cliente de YouTube Music para TV, `com.music.bitchord.tv`): se agrega una sola vez al final de la lista del inicio cuando está instalado, con acento amarillo (FFD60A). |
 
 ## 6. Problemas encontrados y cómo se resolvieron
 

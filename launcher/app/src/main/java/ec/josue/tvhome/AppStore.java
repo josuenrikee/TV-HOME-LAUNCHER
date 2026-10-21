@@ -103,6 +103,18 @@ final class AppStore {
             sp.edit().putString(KEY_PINNED, join(defaults)).putBoolean(KEY_INIT, true).putInt(KEY_LISTV, LIST_VERSION).apply();
         }
 
+        // BitChord (cliente de YouTube Music para TV): se agrega una sola vez al final de la lista cuando se instala
+        if (sp.getInt("append_v", 0) < 1 && !installed.isEmpty()) {
+            AppEntry bc = byPkg.get("com.music.bitchord.tv");
+            if (bc == null) bc = byPkg.get("com.dev.bitchord.tv");
+            if (bc != null) {
+                String cur = sp.getString(KEY_PINNED, "");
+                if (cur == null) cur = "";
+                if (!("," + cur + ",").contains("," + bc.pkg + ",")) cur = cur.isEmpty() ? bc.pkg : cur + "," + bc.pkg;
+                sp.edit().putString(KEY_PINNED, cur).putInt("append_v", 1).apply();
+            }
+        }
+
         pinned.clear();
         String raw = sp.getString(KEY_PINNED, "");
         if (!installed.isEmpty() && raw != null && !raw.isEmpty()) {
@@ -192,6 +204,7 @@ final class AppStore {
         String l = raw.toLowerCase(Locale.ROOT);
         if (l.contains("xuper")) return "Xuper TV";
         if (pkg.startsWith("com.kick")) return "Kick";
+        if (pkg.contains("bitchord")) return "BitChord";
         if (pkg.equals("com.directv.dtvlatam")) return "DirecTV Go";
         return raw;
     }
@@ -246,6 +259,7 @@ final class AppStore {
         if (pkg.startsWith("com.directv")) return 0xFF0071BA;
         if (pkg.startsWith("tv.pluto")) return 0xFFFFE400;
         if (pkg.startsWith("com.kick")) return 0xFF53FC18;
+        if (pkg.contains("bitchord")) return 0xFFFFD60A;
         if (pkg.startsWith("com.spotify")) return 0xFF1DB954;
         if (pkg.equals("com.android.mgstxNF")) return 0xFFF2C94C;
         if (pkg.equals("com.android.tv")) return 0xFF17A2D8;
