@@ -34,7 +34,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        view.onHomePressed();
+        if (intent != null && intent.getBooleanExtra("inputs", false)) view.openInputsFromKey();
+        else view.onHomePressed();
     }
 
     @Override

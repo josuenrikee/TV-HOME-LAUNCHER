@@ -182,6 +182,16 @@ final class LauncherView extends View {
         invalidate();
     }
 
+    /** Lo pide el servicio de teclas al pulsar Entradas/Fuentes del control, desde cualquier app. */
+    void openInputsFromKey() {
+        if (overlay == 1) return;
+        onHomePressed();
+        loadInputs();
+        hdmiIdx = 0;
+        screen = HDMI;
+        invalidate();
+    }
+
     /** Busca otra pantalla de inicio activa en el TV y, si existe, agrega el botón para abrirla. */
     private void findStockHome() {
         stockHome = null;
