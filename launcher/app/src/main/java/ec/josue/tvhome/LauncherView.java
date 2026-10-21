@@ -106,6 +106,15 @@ final class LauncherView extends View {
     private long lastInput = SystemClock.uptimeMillis();
     private float driftX = 0f, driftY = 0f;
     private boolean alarmArmed = false;
+    private final Tween clockAnim = new Tween();
+    private String clockPrevStr = "";
+    private final Runnable minuteTick = new Runnable() {
+        @Override public void run() {
+            tick();
+            long ms = System.currentTimeMillis();
+            handler.postDelayed(this, 60000L - (ms % 60000L) + 40L);
+        }
+    };
     private int lastArtColor = 0, prevArtShown = 0;
     private final Tween artFade = new Tween();
     private long resetArmedUntil = 0L;
@@ -165,6 +174,7 @@ final class LauncherView extends View {
         fmtDate.setTimeZone(tz);
         fmtHour.setTimeZone(tz);
         p.setStrokeJoin(Paint.Join.ROUND);
+        clockAnim.v = 1f;
         store.refresh();
         app = homeIndex();
         focusPos.set(app);
@@ -199,6 +209,9 @@ final class LauncherView extends View {
         handler.post(progTick);
         handler.removeCallbacks(ticker);
         handler.post(ticker);
+        // el reloj cambia justo al empezar cada minuto, no con hasta 15 s de retraso
+        handler.removeCallbacks(minuteTick);
+        handler.postDelayed(minuteTick, 60000L - (System.currentTimeMillis() % 60000L) + 40L);
         if (store.weather) weather.refreshIfStale(new Runnable() { @Override public void run() { invalidate(); } });
         invalidate();
     }
@@ -219,6 +232,7 @@ final class LauncherView extends View {
         media.stop();
         handler.removeCallbacks(progTick);
         handler.removeCallbacks(ticker);
+        handler.removeCallbacks(minuteTick);
     }
 
     /** Se pulsó Inicio: siempre vuelve a la primera app de la lista, con suavidad. */
@@ -394,6 +408,11 @@ final class LauncherView extends View {
         clockStr = fmtClock.format(now);
         syncConsole();
         dateStr = fmtDate.format(now);
+        if (oldClock.length() >= 5 && clockStr.length() >= 5 && !oldClock.equals(clockStr) && resumed) {
+            clockPrevStr = oldClock;
+            clockAnim.set(0f);
+            clockAnim.to(1f, 450, smooth);
+        }
         if (clockStr.length() >= 5) {
             int mi = 0;
             try { mi = Integer.parseInt(clockStr.substring(3, 5)); } catch (NumberFormatException ignored) { }
@@ -1160,9 +1179,25 @@ final class LauncherView extends View {
         p.setColor(0xFFFFFFFF);
         float ca = a * (1f - (alarmArmed ? .35f * r : 0f));
         p.setAlpha(Math.max(0, Math.min(255, (int) (ca * 255))));
-        c.drawText(hh, cx, top + capH, p);
-        c.drawText(mm, cx, top + 2f * capH + gap, p);
+        float t = clockAnim.v;
+        boolean anim = t < .999f && clockPrevStr.length() >= 5;
+        String ph = anim ? clockPrevStr.substring(0, 2) : hh, pm = anim ? clockPrevStr.substring(3, 5) : mm;
+        drawDigits(c, hh, ph, anim && !ph.equals(hh), t, cx, top + capH, ca);
+        drawDigits(c, mm, pm, anim && !pm.equals(mm), t, cx, top + 2f * capH + gap, ca);
         p.setShader(null);
+    }
+
+    /** Dígitos del reloj: al cambiar, los viejos suben y se desvanecen y los nuevos entran desde abajo. */
+    private void drawDigits(Canvas c, String now, String prev, boolean anim, float t, float x, float y, float alpha) {
+        if (!anim) {
+            p.setAlpha(Math.max(0, Math.min(255, (int) (alpha * 255))));
+            c.drawText(now, x, y, p);
+            return;
+        }
+        p.setAlpha(Math.max(0, Math.min(255, (int) (alpha * 255 * (1f - t)))));
+        c.drawText(prev, x, y - 40f * t, p);
+        p.setAlpha(Math.max(0, Math.min(255, (int) (alpha * 255 * t))));
+        c.drawText(now, x, y + 40f * (1f - t), p);
     }
 
     private void drawChrome(Canvas c, int accent, float aFull) {
