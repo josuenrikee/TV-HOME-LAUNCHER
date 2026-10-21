@@ -46,7 +46,7 @@ final class LauncherView extends View {
     private static final int HOME = 0, ALL = 1, EDIT = 2, PICK = 3, HDMI = 4;
     private static final float W = 1920f, H = 1080f;
     private static final int TXT = 0xFFF6F4F0, MUTED = 0xFF8E8C87, SOFT = 0xFFA8A6A0;
-    private static final String[] BASE_TOOLS = {"Todas las apps", "Entradas HDMI", "Editar lista", "Ajustes"};
+    private static final String[] BASE_TOOLS = {"Todas las apps", "Entradas", "Editar lista", "Ajustes"};
     private static final int[] BASE_ACCENT = {0xFF5B5BD6, 0xFFC77700, 0xFF17A2A2, 0xFF7C5CE0};
     private String[] TOOLS = BASE_TOOLS;
     private int[] TOOL_ACCENT = BASE_ACCENT;
@@ -78,7 +78,6 @@ final class LauncherView extends View {
     private List<AppEntry> pickList = new ArrayList<>();
     private final List<TvInputInfo> inputs = new ArrayList<>();
     private final List<String> inputNames = new ArrayList<>();
-    private final List<String> inputStates = new ArrayList<>();
 
     // --- animaciones ---
     private final Tween focusPos = new Tween();
@@ -145,7 +144,6 @@ final class LauncherView extends View {
 
     void onPaused() {
         handler.removeCallbacks(ticker);
-        stopInputWatch();
     }
 
     /** Se pulsó Inicio con el launcher ya abierto. */
@@ -469,49 +467,20 @@ final class LauncherView extends View {
         }
     }
 
-    private TvInputManager tvim = null;
-    private TvInputManager.TvInputCallback inputCb = null;
-
-    private static String stateText(int st) {
-        return st == TvInputManager.INPUT_STATE_DISCONNECTED ? "Sin dispositivo" : "Dispositivo conectado";
-    }
-
-    private void stopInputWatch() {
-        try { if (tvim != null && inputCb != null) tvim.unregisterCallback(inputCb); } catch (Exception ignored) { }
-        inputCb = null;
-    }
-
     private void loadInputs() {
-        stopInputWatch();
         inputs.clear();
         inputNames.clear();
-        inputStates.clear();
         try {
             TvInputManager tim = (TvInputManager) host.getSystemService(Context.TV_INPUT_SERVICE);
             if (tim == null) return;
-            tvim = tim;
             for (TvInputInfo info : tim.getTvInputList()) {
-                if (!info.isPassthroughInput()) continue;
+                boolean tuner = info.getType() == TvInputInfo.TYPE_TUNER && info.isHardwareInput();
+                if (!info.isPassthroughInput() && !tuner) continue;
                 CharSequence nm = info.loadCustomLabel(host);
                 if (nm == null || nm.length() == 0) nm = info.loadLabel(host);
                 inputs.add(info);
-                inputNames.add(nm == null ? info.getId() : nm.toString());
-                // Mientras llega el estado real, no afirmamos nada.
-                inputStates.add("Comprobando…");
+                inputNames.add(tuner ? "TV en vivo (antena)" : (nm == null ? info.getId() : nm.toString()));
             }
-            // Sin suscripcion Android devuelve CONNECTED por defecto: hay que registrar el callback
-            // para recibir el estado real de cada entrada.
-            inputCb = new TvInputManager.TvInputCallback() {
-                @Override public void onInputStateChanged(String inputId, int state) {
-                    for (int i = 0; i < inputs.size(); i++) {
-                        if (inputs.get(i).getId().equals(inputId) && i < inputStates.size()) {
-                            inputStates.set(i, stateText(state));
-                        }
-                    }
-                    postInvalidate();
-                }
-            };
-            tim.registerCallback(inputCb, new Handler(Looper.getMainLooper()));
         } catch (Exception ignored) {
             // El TV no deja ver sus entradas a las apps: la pantalla muestra el aviso.
         }
@@ -519,7 +488,8 @@ final class LauncherView extends View {
 
     private void switchInput(TvInputInfo info, String name) {
         try {
-            Uri u = TvContract.buildChannelUriForPassthroughInput(info.getId());
+            Uri u = info.isPassthroughInput() ? TvContract.buildChannelUriForPassthroughInput(info.getId())
+                    : TvContract.Channels.CONTENT_URI;
             host.startActivity(new Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (Exception e) {
             toast("El TV no permitió cambiar a " + name);
@@ -769,7 +739,7 @@ final class LauncherView extends View {
             else drawGrid(c, pickList, pickIdx, pickTop, false);
             hintBottom(c, "← → ↑ ↓ ELEGIR · OK AGREGAR AL FINAL · ATRÁS VOLVER");
         } else if (screen == HDMI) {
-            header(c, "ENTRADAS", "Entradas HDMI");
+            header(c, "ENTRADAS", "Entradas");
             if (inputs.isEmpty()) {
                 text(c, "El TV no muestra sus entradas a las apps.", 112f, 420f, bold, 56f, SOFT, 1f, -.03f, Paint.Align.LEFT);
                 text(c, "Usa el botón Entrada del control remoto.", 112f, 500f, mono, 28f, MUTED, 1f, .04f, Paint.Align.LEFT);
@@ -781,7 +751,6 @@ final class LauncherView extends View {
                     float a = on ? 1f : .42f;
                     if (on) bar(c, 78f, y + 14f, 0xFFC77700, 8f, 72f);
                     text(c, inputNames.get(i), 112f, y + 74f, bold, 72f, TXT, a, -.035f, Paint.Align.LEFT);
-                    text(c, inputStates.get(i), 1808f, y + 66f, mono, 28f, SOFT, a, .08f, Paint.Align.RIGHT);
                 }
             }
             hintBottom(c, "↑ ↓ ELEGIR · OK CAMBIAR DE ENTRADA · ATRÁS VOLVER");
