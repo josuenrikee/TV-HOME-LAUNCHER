@@ -9,7 +9,7 @@ Es un proyecto personal en versión 0.1.x (la última es la 0.1.30), todavía en
 
 ## Capturas
 
-Capturas reales del TV (1280×720).
+Capturas reales del TV (1280×720), tomadas con la versión 0.1.26. La pantalla de alarmas cambió después (ahora son hasta 5 alarmas con días y etiqueta) y se actualizará en la próxima tanda de capturas.
 
 | Inicio | Todas las apps | Entradas |
 |---|---|---|
