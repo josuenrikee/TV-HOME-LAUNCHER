@@ -66,7 +66,8 @@ final class AppStore {
                 String pkg = ri.activityInfo.packageName;
                 if (pkg.equals(ctx.getPackageName()) || byPkg.containsKey(pkg)) continue;
                 CharSequence label = ri.loadLabel(pm);
-                AppEntry e = new AppEntry(pkg, label == null ? pkg : label.toString(), accentFor(pkg, label == null ? "" : label.toString()));
+                String raw0 = label == null ? pkg : label.toString();
+                AppEntry e = new AppEntry(pkg, displayName(raw0), accentFor(pkg, raw0));
                 byPkg.put(pkg, e);
                 installed.add(e);
             }
@@ -169,6 +170,11 @@ final class AppStore {
         return sb.toString();
     }
 
+    /** Nombre corto para mostrar: la app de IPTV se llama "Xuper Tv NF", se muestra como "Xuper TV". */
+    private static String displayName(String raw) {
+        return raw.toLowerCase(Locale.ROOT).contains("xuper") ? "Xuper TV" : raw;
+    }
+
     /** Color de acento: tabla de marcas conocidas, luego el color dominante del icono, luego una paleta. */
     private int accentFor(String pkg, String label) {
         int known = knownAccent(pkg, label.toLowerCase(Locale.ROOT));
@@ -187,7 +193,7 @@ final class AppStore {
         if (pkg.equals("com.google.android.youtube.tvmusic") || pkg.startsWith("com.google.android.apps.youtube.music")) return 0xFFFF2D55;
         if (pkg.startsWith("com.google.android.youtube")) return 0xFFFF3B30;
         if (pkg.equals("com.wbd.stream") || pkg.startsWith("com.hbo") || l.contains("hbo") || l.equals("max")) return 0xFF6C4CFF;
-        if (l.contains("xuper")) return 0xFF1FA866;
+        if (l.contains("xuper")) return 0xFF2D9CFF;
         if (pkg.startsWith("com.disney")) return 0xFF3D7BFF;
         if (pkg.startsWith("com.amazon.amazonvideo")) return 0xFF00A8E1;
         if (pkg.startsWith("com.apple.atve")) return 0xFFC9C9CE;
