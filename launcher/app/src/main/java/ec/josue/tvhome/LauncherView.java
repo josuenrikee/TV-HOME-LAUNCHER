@@ -73,6 +73,7 @@ final class LauncherView extends View {
     private final Typeface bold = Typeface.create("sans-serif", Typeface.BOLD);
     private final Typeface medium = Typeface.create("sans-serif-medium", Typeface.NORMAL);
     private final Typeface mono = Typeface.MONOSPACE;
+    private final Typeface clockFace;
 
     // --- estado de navegación ---
     private int screen = HOME;
@@ -119,6 +120,10 @@ final class LauncherView extends View {
         this.host = host;
         this.store = new AppStore(host);
         this.weather = new Weather(host);
+        Typeface cf;
+        try { cf = Typeface.createFromAsset(host.getAssets(), "fonts/BebasNeue-Regular.ttf"); }
+        catch (Throwable t) { cf = Typeface.create("sans-serif-condensed", Typeface.BOLD); }
+        clockFace = cf;
         setFocusable(true);
         TimeZone tz = TimeZone.getTimeZone("America/Guayaquil");
         fmtClock.setTimeZone(tz);
@@ -712,6 +717,34 @@ final class LauncherView extends View {
         c.restore();
     }
 
+    private Shader clockShader = null;
+    private int clockKey = 0;
+
+    /** Hora grande apilada (hh sobre mm) a la derecha, con degradado del color de la app; la fecha va centrada encima. */
+    private void drawBigClock(Canvas c, int accent, float a) {
+        boolean ok = clockStr.length() >= 5;
+        String hh = ok ? clockStr.substring(0, 2) : "--";
+        String mm = ok ? clockStr.substring(3, 5) : "--";
+        final float cx = 1572f, capH = 390f, gap = 24f, top = 150f;
+        text(c, dateStr, cx, 108f, medium, 34f, SOFT, a, 0f, Paint.Align.CENTER);
+        if (clockShader == null || clockKey != accent) {
+            clockShader = new LinearGradient(0f, top, 0f, top + 2f * capH + gap,
+                withAlpha(accent, .72f), withAlpha(accent, .22f), Shader.TileMode.CLAMP);
+            clockKey = accent;
+        }
+        p.setStyle(Paint.Style.FILL);
+        p.setTypeface(clockFace);
+        p.setTextSize(capH / .7f);
+        p.setLetterSpacing(.01f);
+        p.setTextAlign(Paint.Align.CENTER);
+        p.setShader(clockShader);
+        p.setColor(0xFFFFFFFF);
+        p.setAlpha(Math.max(0, Math.min(255, (int) (a * 255))));
+        c.drawText(hh, cx, top + capH, p);
+        c.drawText(mm, cx, top + 2f * capH + gap, p);
+        p.setShader(null);
+    }
+
     private void drawChrome(Canvas c, int accent, float a) {
         if (store.greeting) {
             fill.setShader(null);
@@ -727,8 +760,7 @@ final class LauncherView extends View {
             float w = tw(temp, medium, 44f, -.01f);
             text(c, " · Guayaquil", 112f + w, 190f, medium, 44f, MUTED, a, -.01f, Paint.Align.LEFT);
         }
-        text(c, clockStr, 1808f, 168f, medium, 104f, TXT, a, -.03f, Paint.Align.RIGHT);
-        text(c, dateStr, 1808f, 232f, medium, 38f, SOFT, a, 0f, Paint.Align.RIGHT);
+        drawBigClock(c, accent, a);
 
         // fila inferior: oculta mientras se exploran las apps, aparece al bajar del final de la lista
         float ra = a * toolsDim.v;

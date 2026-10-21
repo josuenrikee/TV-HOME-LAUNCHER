@@ -40,3 +40,8 @@ se arma con el inventario de ese modelo (`scripts\inventory.ps1`). Guarda la lis
 Las herramientas de `tools/` y los ejemplos son de [CleanYourTV](https://github.com/Gathin23/cleanyourtv),
 de Gathin, bajo licencia MIT. El launcher, los scripts y el resto son de Josué Prieto, también MIT. Los datos
 de temperatura son de [Open-Meteo.com](https://open-meteo.com), licencia CC BY 4.0.
+
+## Licencias de terceros
+
+- Tipografía **Bebas Neue** (reloj grande del inicio): SIL Open Font License 1.1, texto en `launcher/app/src/main/assets/fonts/OFL.txt`.
+- Clima: [Open-Meteo](https://open-meteo.com), datos CC BY 4.0.
