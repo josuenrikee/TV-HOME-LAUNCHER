@@ -657,7 +657,6 @@ final class LauncherView extends View {
                 float dist = Math.abs(dd);
                 float ang = dd * WHEEL_STEP;
                 if (Math.abs(ang) > 1.4f) continue;
-                float cs = (float) Math.cos(ang);
                 float y = 540f + WHEEL_R * (float) Math.sin(ang) - 75f;
                 float op = distAlpha(dist);
                 float opTools = dist < .5f ? .55f : op * .8f;
@@ -670,7 +669,7 @@ final class LauncherView extends View {
                 if (opening && sel) { op = 1f; foc = 1f; }
                 float ds = depthScale(dist);
                 float dx = dist < 1f ? 28f * (1f - dist) : -10f * Math.min(dist - 1f, 2f);
-                drawRow(c, store.pinned.get(i).label, y, foc, TXT, op * a, false, (.6f + .4f * cs) * ds, cs * ds, dx);
+                drawRow(c, store.pinned.get(i).label, y, foc, TXT, op * a, false, ds, ds, dx);
             }
         }
         c.restore();
