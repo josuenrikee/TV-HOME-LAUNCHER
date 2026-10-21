@@ -26,6 +26,7 @@ public class AlarmService extends Service {
     static final String ACT_STOP = "ec.josue.tvhome.ALARM_STOP";
     static final String ACT_SNOOZE = "ec.josue.tvhome.ALARM_SNOOZE";
     static volatile boolean ringing = false;
+    static volatile String label = "alarma";
     private static final long MAX_MS = 10 * 60 * 1000L;
 
     private final Handler h = new Handler(Looper.getMainLooper());
@@ -36,6 +37,7 @@ public class AlarmService extends Service {
     private AudioFocusRequest focus;
     private long startedAt;
     private int round = 1;
+    private int labelIdx = 0;
     private int prevVol = -1;
     private long rampT0 = 0L;
     private boolean raised = false;
@@ -48,6 +50,8 @@ public class AlarmService extends Service {
         if (ACT_SNOOZE.equals(a)) { finishRing(true); return START_NOT_STICKY; }
         if (ringing) return START_NOT_STICKY;
         round = in == null ? 1 : in.getIntExtra("round", 1);
+        labelIdx = in == null ? 0 : in.getIntExtra("label", 0);
+        label = labelIdx > 0 && labelIdx < AlarmStore.LABELS.length ? AlarmStore.LABELS[labelIdx] : "alarma";
         ringing = true;
         raised = false;
         startedAt = SystemClock.elapsedRealtime();
@@ -181,8 +185,9 @@ public class AlarmService extends Service {
         } catch (Exception ignored) { }
         prevVol = -1;
         getSharedPreferences("tvhome", MODE_PRIVATE).edit().remove("alarm_prev_vol").apply();
-        if (snooze) AlarmStore.once(this, System.currentTimeMillis() + AlarmStore.SNOOZE_MIN * 60000L, 1);
-        else if (auto) AlarmStore.once(this, System.currentTimeMillis() + AlarmStore.SNOOZE_MIN * 60000L, 2);
+        if (snooze) AlarmStore.once(this, System.currentTimeMillis() + AlarmStore.SNOOZE_MIN * 60000L, 1, labelIdx);
+        else if (auto) AlarmStore.once(this, System.currentTimeMillis() + AlarmStore.SNOOZE_MIN * 60000L, 2, labelIdx);
+        AlarmStore.updatePower(this, false);
         stopForeground(true);
         stopSelf();
     }

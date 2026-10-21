@@ -28,6 +28,8 @@ final class MediaWatcher {
 
     String title = "", artist = "", pkg = "";
     Bitmap art = null;
+    /** Color dominante de la portada (0 si no hay uno útil), para teñir el reposo. */
+    int artColor = 0;
     boolean playing = false;
     boolean hasSession = false;
     private long duration = 0L;
@@ -102,6 +104,8 @@ final class MediaWatcher {
         artist = "";
         pkg = "";
         art = null;
+        artColor = 0;
+        lastArtSrc = null;
         state = null;
         duration = 0L;
     }
@@ -157,10 +161,37 @@ final class MediaWatcher {
             if (src != lastArtSrc) {
                 lastArtSrc = src;
                 art = square(src);
+                artColor = dominant(art);
             }
         } catch (Exception e) {
             clear();
         }
+    }
+
+    /** Color vivo predominante de la portada, muestreando pocos pixeles; 0 si es gris, muy oscura o no hay imagen. */
+    private static int dominant(Bitmap b) {
+        if (b == null) return 0;
+        float[] hsv = new float[3];
+        double r = 0, g = 0, bl = 0, wsum = 0;
+        int w = b.getWidth(), h = b.getHeight(), step = Math.max(1, Math.min(w, h) / 24);
+        for (int y = 0; y < h; y += step) {
+            for (int x = 0; x < w; x += step) {
+                int px = b.getPixel(x, y);
+                android.graphics.Color.colorToHSV(px, hsv);
+                if (hsv[1] < .25f || hsv[2] < .30f) continue;
+                double wt = hsv[1] * hsv[2];
+                r += android.graphics.Color.red(px) * wt;
+                g += android.graphics.Color.green(px) * wt;
+                bl += android.graphics.Color.blue(px) * wt;
+                wsum += wt;
+            }
+        }
+        if (wsum < 3.0) return 0;
+        int avg = android.graphics.Color.rgb((int) (r / wsum), (int) (g / wsum), (int) (bl / wsum));
+        android.graphics.Color.colorToHSV(avg, hsv);
+        hsv[1] = Math.max(.50f, Math.min(.95f, hsv[1]));
+        hsv[2] = .95f;
+        return android.graphics.Color.HSVToColor(hsv) | 0xFF000000;
     }
 
     /** Recorte cuadrado y pequeno de la portada, para dibujarla barata en el lienzo. */

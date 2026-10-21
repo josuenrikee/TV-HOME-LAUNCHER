@@ -89,7 +89,7 @@ public class AlarmActivity extends Activity {
             p.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
             p.setTextSize(40f);
             p.setColor(0xFF8E8C87);
-            c.drawText("alarma", 960f, 250f, p);
+            c.drawText(AlarmService.label, 960f, 250f, p);
             p.setTypeface(clock);
             p.setTextSize(620f);
             p.setLetterSpacing(.01f);

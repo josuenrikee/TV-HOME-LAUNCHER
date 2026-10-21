@@ -38,6 +38,7 @@ import android.view.animation.PathInterpolator;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -105,6 +106,8 @@ final class LauncherView extends View {
     private long lastInput = SystemClock.uptimeMillis();
     private float driftX = 0f, driftY = 0f;
     private boolean alarmArmed = false;
+    private int lastArtColor = 0, prevArtShown = 0;
+    private final Tween artFade = new Tween();
     private long resetArmedUntil = 0L;
     private String alarmTimeStr = "";
     private final MediaWatcher media;
@@ -275,6 +278,12 @@ final class LauncherView extends View {
             consoleFocus = false;
             cFocus.to(0f, 200, LIN);
         }
+        if (media.artColor != lastArtColor) {
+            prevArtShown = shownArt();
+            lastArtColor = media.artColor;
+            artFade.set(0f);
+            artFade.to(1f, 600, smooth);
+        }
         boolean pl = media.hasSession && media.playing;
         if (pl != restMusicTarget) {
             restMusicTarget = pl;
@@ -284,13 +293,45 @@ final class LauncherView extends View {
 
     /** Con una alarma activa la pantalla no se apaga sola mientras el launcher está al frente. */
     private void applyAlarmState() {
-        alarmArmed = AlarmStore.enabled(host);
-        int h = AlarmStore.hour(host), m = AlarmStore.minute(host);
-        alarmTimeStr = (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+        boolean feat = AlarmStore.feature(host);
+        if (feat != alarmFeature) { alarmFeature = feat; rebuildTools(); }
+        alarmArmed = AlarmStore.armed(host);
+        long[] nx = AlarmStore.next(host);
+        if (nx != null) {
+            Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("America/Guayaquil"));
+            cal.setTimeInMillis(nx[0]);
+            alarmTimeStr = two(cal.get(Calendar.HOUR_OF_DAY)) + ":" + two(cal.get(Calendar.MINUTE));
+        } else alarmTimeStr = "";
+        boolean keep = AlarmStore.hold(host);
         try {
-            if (alarmArmed) host.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            if (keep) host.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             else host.getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         } catch (Exception ignored) { }
+        AlarmStore.updatePower(host, false);
+    }
+
+    /** Arma la fila inferior según lo que esté disponible: la alarma solo sale si su función está encendida. */
+    private void rebuildTools() {
+        java.util.ArrayList<String> names = new java.util.ArrayList<>();
+        java.util.ArrayList<Integer> acc = new java.util.ArrayList<>();
+        names.add("Todas las apps"); acc.add(0xFF5B5BD6);
+        names.add("Entradas"); acc.add(0xFFC77700);
+        names.add("Editar lista"); acc.add(0xFF17A2A2);
+        if (alarmFeature) { names.add("Alarma"); acc.add(0xFFE0A21B); }
+        names.add("Ajustes"); acc.add(0xFF7C5CE0);
+        if (stockHome != null) { names.add("Google TV"); acc.add(0xFF4285F4); }
+        TOOLS = names.toArray(new String[0]);
+        TOOL_ACCENT = new int[acc.size()];
+        for (int i = 0; i < acc.size(); i++) TOOL_ACCENT[i] = acc.get(i);
+        if (tool > TOOLS.length - 1) tool = TOOLS.length - 1;
+    }
+
+    /** Color de la portada con fundido al cambiar de canción (0 si no hay). */
+    private int shownArt() {
+        int cur = media.artColor;
+        if (cur == 0) return 0;
+        if (prevArtShown == 0) return cur;
+        return lerpColor(prevArtShown | 0xFF000000, cur | 0xFF000000, artFade.v);
     }
 
     /** Pasa al reposo: la lista y los datos salen y el reloj se desliza al centro. */
@@ -343,14 +384,7 @@ final class LauncherView extends View {
                 break;
             }
         } catch (Exception ignored) { stockHome = null; }
-        if (stockHome != null) {
-            TOOLS = new String[] {BASE_TOOLS[0], BASE_TOOLS[1], BASE_TOOLS[2], BASE_TOOLS[3], BASE_TOOLS[4], "Google TV"};
-            TOOL_ACCENT = new int[] {BASE_ACCENT[0], BASE_ACCENT[1], BASE_ACCENT[2], BASE_ACCENT[3], BASE_ACCENT[4], 0xFF4285F4};
-        } else {
-            TOOLS = BASE_TOOLS;
-            TOOL_ACCENT = BASE_ACCENT;
-        }
-        if (tool > TOOLS.length - 1) tool = TOOLS.length - 1;
+        rebuildTools();
     }
 
     private void tick() {
@@ -383,7 +417,7 @@ final class LauncherView extends View {
     private void clampSelection() {
         int n = Math.max(1, store.pinned.size());
         if (app > n - 1) { app = n - 1; focusPos.set(app); }
-        int total = store.pinned.size() + 6;
+        int total = store.pinned.size() + 7;
         if (editI > total - 1) editI = total - 1;
     }
 
@@ -516,13 +550,13 @@ final class LauncherView extends View {
     }
 
     private void enterTool(int t) {
-        if (t == 0) { go(new Runnable() { @Override public void run() { screen = ALL; } }); }
-        else if (t == 1) { go(new Runnable() { @Override public void run() { loadInputs(); hdmiIdx = 0; screen = HDMI; } }); }
-        else if (t == 2) { go(new Runnable() { @Override public void run() { editI = 0; editCol = 0; editMoving = false; editScroll.set(0f); screen = EDIT; } }); }
-        else if (t == 3) { go(new Runnable() { @Override public void run() {
-            alarmOn = AlarmStore.enabled(host); alarmH = AlarmStore.hour(host); alarmM = AlarmStore.minute(host);
-            alarmRow = 0; alarmCol = 0; alarmEditing = false; screen = ALARM; } }); }
-        else if (t == 4) { openSystemSettings(); }
+        if (t < 0 || t >= TOOLS.length) return;
+        String nm = TOOLS[t];
+        if (nm.equals("Todas las apps")) { go(new Runnable() { @Override public void run() { screen = ALL; } }); }
+        else if (nm.equals("Entradas")) { go(new Runnable() { @Override public void run() { loadInputs(); hdmiIdx = 0; screen = HDMI; } }); }
+        else if (nm.equals("Editar lista")) { go(new Runnable() { @Override public void run() { editI = 0; editCol = 0; editMoving = false; editScroll.set(0f); screen = EDIT; } }); }
+        else if (nm.equals("Alarma")) { go(new Runnable() { @Override public void run() { openAlarms(); } }); }
+        else if (nm.equals("Ajustes")) { openSystemSettings(); }
         else if (stockHome != null) {
             try { host.startActivity(stockHome); } catch (Exception e) { toast("No se pudo abrir el inicio del TV"); }
         }
@@ -571,40 +605,104 @@ final class LauncherView extends View {
         pickTop = gridScroll(pickIdx, pickTop);
     }
 
-    // --- alarma ---
-    private boolean alarmOn = false, alarmEditing = false;
-    private int alarmH = 6, alarmM = 30, alarmRow = 0, alarmCol = 0;
+    // --- alarmas ---
+    private List<AlarmStore.Alarm> alarms = new ArrayList<>();
+    private int alarmSel = 0, alarmEditIdx = -1, alarmField = 0, alarmDay = 0;
+    private long alarmDelArmed = 0L;
+    private boolean alarmFeature = true;
 
-    private void saveAlarm() { AlarmStore.save(host, alarmOn, alarmH, alarmM); applyAlarmState(); }
+    private void persistAlarms() { AlarmStore.save(host, alarms); applyAlarmState(); }
+
+    private void openAlarms() {
+        alarms = AlarmStore.list(host);
+        alarmSel = 0;
+        alarmEditIdx = -1;
+        alarmField = 0;
+        alarmDay = 0;
+        screen = ALARM;
+    }
 
     private String alarmWhen() {
-        long t = AlarmStore.nextTrigger(host);
-        long mins = Math.max(0, (t - System.currentTimeMillis()) / 60000L);
-        return "sonará en " + (mins / 60) + " h " + (mins % 60) + " min";
+        long[] nx = AlarmStore.next(host);
+        if (nx == null) return "";
+        long mins = Math.max(0, (nx[0] - System.currentTimeMillis()) / 60000L);
+        return "próxima: sonará en " + (mins / 60) + " h " + (mins % 60) + " min";
+    }
+
+    private static String two(int v) { return (v < 10 ? "0" : "") + v; }
+
+    private static String daysText(int mask) {
+        if (mask == 127) return "todos los días";
+        if (mask == 0) return "una vez";
+        if (mask == 31) return "lunes a viernes";
+        if (mask == 96) return "fin de semana";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 7; i++) if ((mask & (1 << i)) != 0) { if (sb.length() > 0) sb.append(' '); sb.append(AlarmStore.DAYS[i]); }
+        return sb.toString();
     }
 
     private void keyAlarm(int k) {
-        if (alarmEditing) {
-            if (k == UP || k == DOWN) {
-                int d = k == UP ? 1 : -1;
-                if (alarmCol == 0) alarmH = (alarmH + d + 24) % 24;
-                else alarmM = (alarmM + 5 * d + 60) % 60;
-                saveAlarm();
-            } else if (k == LEFT) alarmCol = 0;
-            else if (k == RIGHT) alarmCol = 1;
-            else { alarmEditing = false; if (!alarmOn) { alarmOn = true; saveAlarm(); } }
-            return;
-        }
+        if (alarmEditIdx >= 0) { keyAlarmEdit(k); return; }
+        int n = alarms.size();
+        boolean canAdd = n < AlarmStore.MAX;
+        int rows = n + (canAdd ? 1 : 0) + 1;
         if (k == BACK) { backToHome(3); return; }
-        if (k == UP && alarmRow > 0) alarmRow--;
-        else if (k == DOWN && alarmRow < 2) alarmRow++;
-        else if (k == OK || k == LONG) {
-            if (alarmRow == 0) { alarmOn = !alarmOn; saveAlarm(); }
-            else if (alarmRow == 1) { alarmEditing = true; alarmCol = 0; }
-            else {
-                AlarmStore.once(host, System.currentTimeMillis() + 60000L, 1);
-                toast("Sonará en 1 minuto");
+        if (k == UP && alarmSel > 0) alarmSel--;
+        else if (k == DOWN && alarmSel < rows - 1) alarmSel++;
+        else if (alarmSel < n) {
+            AlarmStore.Alarm a = alarms.get(alarmSel);
+            if (k == LEFT || k == RIGHT) { a.on = !a.on; persistAlarms(); }
+            else if (k == OK || k == LONG) { alarmEditIdx = alarmSel; alarmField = 0; alarmDay = 0; alarmDelArmed = 0L; }
+        } else if (canAdd && alarmSel == n) {
+            if (k == OK || k == LONG) {
+                alarms.add(new AlarmStore.Alarm());
+                persistAlarms();
+                alarmEditIdx = n;
+                alarmField = 0;
+                alarmDay = 0;
+                alarmDelArmed = 0L;
             }
+        } else if (k == OK || k == LONG) {
+            AlarmStore.once(host, System.currentTimeMillis() + 60000L, 1, 0);
+            applyAlarmState();
+            toast("Sonará en 1 minuto");
+        }
+    }
+
+    private void keyAlarmEdit(int k) {
+        if (alarmEditIdx < 0 || alarmEditIdx >= alarms.size()) { alarmEditIdx = -1; return; }
+        AlarmStore.Alarm a = alarms.get(alarmEditIdx);
+        if (k == BACK) { alarmEditIdx = -1; alarmDelArmed = 0L; return; }
+        if (k == UP) { if (alarmField > 0) alarmField--; return; }
+        if (k == DOWN) { if (alarmField < 4) alarmField++; return; }
+        int d = k == RIGHT ? 1 : (k == LEFT ? -1 : 0);
+        switch (alarmField) {
+            case 0:
+                if (d != 0) { a.h = (a.h + d + 24) % 24; a.on = true; persistAlarms(); }
+                break;
+            case 1:
+                if (d != 0) { a.m = (a.m + d + 60) % 60; a.on = true; persistAlarms(); }
+                break;
+            case 2:
+                if (d != 0) alarmDay = Math.max(0, Math.min(6, alarmDay + d));
+                else if (k == OK || k == LONG) { a.days ^= (1 << alarmDay); persistAlarms(); }
+                break;
+            case 3:
+                if (d != 0) { a.label = (a.label + d + AlarmStore.LABELS.length) % AlarmStore.LABELS.length; persistAlarms(); }
+                break;
+            default:
+                if (k == OK || k == LONG) {
+                    if (SystemClock.uptimeMillis() < alarmDelArmed) {
+                        alarms.remove(alarmEditIdx);
+                        alarmEditIdx = -1;
+                        alarmSel = Math.max(0, Math.min(alarmSel, alarms.size()));
+                        alarmDelArmed = 0L;
+                        persistAlarms();
+                    } else {
+                        alarmDelArmed = SystemClock.uptimeMillis() + 3500;
+                        toast("Pulsa OK otra vez para eliminar la alarma");
+                    }
+                }
         }
     }
 
@@ -618,7 +716,7 @@ final class LauncherView extends View {
 
     private void keyEdit(int k) {
         int n = store.pinned.size();
-        int last = n + 5;
+        int last = n + 6;
         if (k == BACK) {
             if (editMoving) { editMoving = false; return; }
             backToHome(2);
@@ -666,7 +764,12 @@ final class LauncherView extends View {
             } else if (editI == n + 2) store.setWeather(!store.weather);
             else if (editI == n + 3) store.setGreeting(!store.greeting);
             else if (editI == n + 4) store.setAnim(!store.anim);
-            else cycleRest(1, true);
+            else if (editI == n + 5) cycleRest(1, true);
+            else {
+                // función de alarma: al apagarla desaparece de la fila inferior y no se programa nada
+                AlarmStore.setFeature(host, !AlarmStore.feature(host));
+                applyAlarmState();
+            }
             if (store.weather) weather.refreshIfStale(new Runnable() { @Override public void run() { invalidate(); } });
         }
         focusEdit();
@@ -1024,7 +1127,7 @@ final class LauncherView extends View {
         final float cx = 1572f + (960f - 1572f) * r + driftX * r;
         final float capH = 390f + 23f * r, gap = 24f + r, top = 170f - 9f * r + driftY * r;
         text(c, dateStr, cx, 128f - 11f * r + driftY * r, medium, 34f, SOFT, a, 0f, Paint.Align.CENTER);
-        if (alarmArmed && r > .01f) text(c, "alarma " + alarmTimeStr, cx, 128f - 11f * r + driftY * r + 32f, medium, 26f, MUTED, a * r, 0f, Paint.Align.CENTER);
+        if (alarmArmed && alarmTimeStr.length() > 0 && r > .01f) text(c, "alarma " + alarmTimeStr, cx, 128f - 11f * r + driftY * r + 32f, medium, 26f, MUTED, a * r, 0f, Paint.Align.CENTER);
         if (clockShader == null || clockKey != accent || clockR != r || clockTop != top) {
             clockShader = new LinearGradient(0f, top, 0f, top + 2f * capH + gap,
                 withAlpha(accent, .55f), withAlpha(accent, .16f), Shader.TileMode.CLAMP);
@@ -1053,7 +1156,10 @@ final class LauncherView extends View {
         c.translate(-120f * rest.v, 0f);
         drawChromeLeft(c, accent, a);
         c.restore();
-        drawBigClock(c, accent, aFull);
+        int art = shownArt();
+        int clockAcc = (art != 0 && rest.v > .001f)
+            ? lerpColor(accent | 0xFF000000, art | 0xFF000000, restMusic.v * rest.v) : accent;
+        drawBigClock(c, clockAcc, aFull);
         drawRestConsole(c, aFull);
     }
 
@@ -1390,39 +1496,88 @@ final class LauncherView extends View {
 
     private void drawAlarm(Canvas c) {
         header(c, "ALARMA", "Alarma");
-        // fila 0: activar
-        boolean on0 = alarmRow == 0;
-        if (on0) bar(c, 78f, 350f + 10f, 0xFFE0A21B, 8f, 44f);
-        text(c, "Alarma diaria", 112f, 396f, bold, 44f, TXT, on0 ? 1f : .42f, -.035f, Paint.Align.LEFT);
-        drawSwitch(c, 1808f - 88f, 354f, alarmOn, on0 ? 1f : .42f);
-        // fila 1: hora
-        boolean on1 = alarmRow == 1;
-        float a1 = on1 ? 1f : .42f;
-        if (on1) bar(c, 78f, 470f, 0xFFE0A21B, 8f, 150f);
-        String hh = (alarmH < 10 ? "0" : "") + alarmH, mm = (alarmM < 10 ? "0" : "") + alarmM;
-        float w = tw("00", bold, 150f, -.03f), colonW = tw(":", bold, 150f, -.03f);
-        text(c, hh, 112f, 600f, bold, 150f, TXT, a1, -.03f, Paint.Align.LEFT);
-        text(c, ":", 112f + w + 6f, 600f, bold, 150f, TXT, a1 * .6f, -.03f, Paint.Align.LEFT);
-        text(c, mm, 112f + w + colonW + 12f, 600f, bold, 150f, TXT, a1, -.03f, Paint.Align.LEFT);
-        if (alarmEditing) {
-            float ux = alarmCol == 0 ? 112f : 112f + w + colonW + 12f;
+        final int AMB = 0xFFE0A21B;
+        if (alarmEditIdx >= 0 && alarmEditIdx < alarms.size()) { drawAlarmEdit(c, alarms.get(alarmEditIdx), AMB); return; }
+        int n = alarms.size();
+        boolean canAdd = n < AlarmStore.MAX;
+        int rows = n + (canAdd ? 1 : 0) + 1;
+        for (int i = 0; i < rows; i++) {
+            float y = 262f + i * 94f;
+            boolean on = i == alarmSel;
+            float al = on ? 1f : .42f;
+            if (on) bar(c, 78f, y + 6f, AMB, 8f, 60f);
+            if (i < n) {
+                AlarmStore.Alarm a = alarms.get(i);
+                text(c, two(a.h) + ":" + two(a.m), 112f, y + 62f, bold, 64f, TXT, al * (a.on ? 1f : .6f), -.03f, Paint.Align.LEFT);
+                String d = daysText(a.days) + (a.label > 0 ? "  ·  " + AlarmStore.LABELS[a.label] : "");
+                text(c, d, 400f, y + 60f, medium, 30f, SOFT, al, 0f, Paint.Align.LEFT);
+                drawSwitch(c, 1808f - 88f, y + 10f, a.on, al);
+            } else if (canAdd && i == n) {
+                text(c, "+ Nueva alarma", 112f, y + 60f, bold, 44f, TXT, al, -.035f, Paint.Align.LEFT);
+            } else {
+                text(c, "Probar en 1 minuto", 112f, y + 60f, bold, 44f, TXT, al, -.035f, Paint.Align.LEFT);
+            }
+        }
+        String w = alarmWhen();
+        if (w.length() > 0) text(c, w, 112f, 990f, medium, 30f, MUTED, 1f, 0f, Paint.Align.LEFT);
+        text(c, "Izquierda y derecha activan o apagan · OK edita", 112f, 1038f, medium, 26f, SOFT, 1f, 0f, Paint.Align.LEFT);
+    }
+
+    private void drawAlarmEdit(Canvas c, AlarmStore.Alarm a, int amb) {
+        // hora y minutos
+        float w2 = tw("00", bold, 170f, -.03f), cw = tw(":", bold, 170f, -.03f);
+        float x0 = 112f, base = 470f;
+        boolean fh = alarmField == 0, fm = alarmField == 1;
+        text(c, two(a.h), x0, base, bold, 170f, TXT, fh || fm ? 1f : .42f, -.03f, Paint.Align.LEFT);
+        text(c, ":", x0 + w2 + 6f, base, bold, 170f, TXT, .5f, -.03f, Paint.Align.LEFT);
+        text(c, two(a.m), x0 + w2 + cw + 12f, base, bold, 170f, TXT, fh || fm ? 1f : .42f, -.03f, Paint.Align.LEFT);
+        if (fh || fm) {
+            float ux = fh ? x0 : x0 + w2 + cw + 12f;
             fill.setShader(null);
-            fill.setColor(0xFFE0A21B);
+            fill.setColor(amb);
             fill.setAlpha(255);
-            rect.set(ux, 622f, ux + w, 630f);
+            rect.set(ux, base + 22f, ux + w2, base + 30f);
             c.drawRoundRect(rect, 4f, 4f, fill);
-            text(c, "Arriba y abajo cambian el valor · OK termina", 112f, 690f, medium, 28f, SOFT, 1f, 0f, Paint.Align.LEFT);
-        } else if (on1) {
-            text(c, "OK para cambiar la hora", 112f, 690f, medium, 28f, SOFT, 1f, 0f, Paint.Align.LEFT);
         }
-        // fila 2: probar
-        boolean on2 = alarmRow == 2;
-        if (on2) bar(c, 78f, 790f + 10f, 0xFFE0A21B, 8f, 44f);
-        text(c, "Probar en 1 minuto", 112f, 836f, bold, 44f, TXT, on2 ? 1f : .42f, -.035f, Paint.Align.LEFT);
-        if (alarmOn) {
-            text(c, alarmWhen(), 112f, 920f, medium, 30f, MUTED, 1f, 0f, Paint.Align.LEFT);
-            text(c, "No apagues el TV con el control: déjalo en reposo para que la alarma suene.", 112f, 972f, medium, 28f, SOFT, 1f, 0f, Paint.Align.LEFT);
+        // días
+        boolean fd = alarmField == 2;
+        float dy = 590f;
+        if (fd) bar(c, 78f, dy + 6f, amb, 8f, 64f);
+        for (int i = 0; i < 7; i++) {
+            float x = 112f + i * 104f;
+            boolean sel = (a.days & (1 << i)) != 0;
+            rect.set(x, dy, x + 88f, dy + 76f);
+            fill.setShader(null);
+            fill.setColor(TXT);
+            fill.setAlpha(sel ? 255 : 34);
+            c.drawRoundRect(rect, 8f, 8f, fill);
+            if (fd && i == alarmDay) {
+                p.setShader(null);
+                p.setStyle(Paint.Style.STROKE);
+                p.setStrokeWidth(5f);
+                p.setColor(amb | 0xFF000000);
+                p.setAlpha(255);
+                rect.set(x - 5f, dy - 5f, x + 93f, dy + 81f);
+                c.drawRoundRect(rect, 11f, 11f, p);
+                p.setStyle(Paint.Style.FILL);
+            }
+            text(c, AlarmStore.DAYS[i], x + 44f, dy + 52f, bold, 38f, sel ? 0xFF0A0A0B : TXT, fd ? 1f : .8f, 0f, Paint.Align.CENTER);
         }
+        text(c, daysText(a.days), 112f + 7f * 104f + 16f, dy + 50f, medium, 30f, SOFT, 1f, 0f, Paint.Align.LEFT);
+        // etiqueta
+        boolean fl = alarmField == 3;
+        float ly = 730f;
+        if (fl) bar(c, 78f, ly + 10f, amb, 8f, 50f);
+        String lab = a.label > 0 ? AlarmStore.LABELS[a.label] : "sin etiqueta";
+        text(c, "Etiqueta", 112f, ly + 48f, bold, 44f, TXT, fl ? 1f : .42f, -.035f, Paint.Align.LEFT);
+        text(c, (fl ? "‹  " : "") + lab + (fl ? "  ›" : ""), 560f, ly + 46f, medium, 36f, fl ? TXT : SOFT, 1f, 0f, Paint.Align.LEFT);
+        // eliminar
+        boolean fe = alarmField == 4;
+        float ey = 850f;
+        if (fe) bar(c, 78f, ey + 10f, amb, 8f, 50f);
+        boolean armed = SystemClock.uptimeMillis() < alarmDelArmed;
+        text(c, armed ? "Pulsa OK otra vez para eliminar" : "Eliminar alarma", 112f, ey + 48f, bold, 44f, TXT, fe ? 1f : .42f, -.035f, Paint.Align.LEFT);
+        text(c, "Arriba y abajo cambian de campo · izquierda y derecha cambian el valor · atrás guarda", 112f, 1038f, medium, 26f, SOFT, 1f, 0f, Paint.Align.LEFT);
     }
 
     private void header(Canvas c, String kicker, String title) {
@@ -1511,7 +1666,7 @@ final class LauncherView extends View {
         int n = store.pinned.size();
         c.save();
         c.clipRect(0f, 235f, W, 985f);
-        for (int idx = 0; idx < n + 6; idx++) {
+        for (int idx = 0; idx < n + 7; idx++) {
             float y = editRowTop(idx) - editScroll.v;
             if (y < 170f || y > 1000f) continue;
             boolean on = idx == editI;
@@ -1526,7 +1681,8 @@ final class LauncherView extends View {
             else if (idx == n + 2) { label = "Clima en inicio"; chipOn = store.weather; right = chipOn ? "Activado" : "Apagado"; }
             else if (idx == n + 3) { label = "Saludo según la hora"; chipOn = store.greeting; right = chipOn ? "Activado" : "Apagado"; }
             else if (idx == n + 4) { label = "Efecto de apertura"; chipOn = store.anim; right = chipOn ? "Activado" : "Apagado"; }
-            else { label = "Reposo con reloj"; right = restLabel(store.restMin); }
+            else if (idx == n + 5) { label = "Reposo con reloj"; right = restLabel(store.restMin); }
+            else { label = "Alarma"; chipOn = AlarmStore.feature(host); right = chipOn ? "Activado" : "Apagado"; }
             if (on) bar(c, 78f, y + 10f, accent, 8f, 44f);
             float tx = 112f;
             if (idx < n) {
