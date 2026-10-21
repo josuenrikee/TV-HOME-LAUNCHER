@@ -67,7 +67,7 @@ Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, con foco ini
 | 0.1.13 | Pantalla invisible para el aviso del panel de notificaciones y servicio de accesibilidad de respaldo (solo filtra teclas); con él el engranaje del control abre Ajustes. |
 | 0.1.14 | El servicio también atiende Entradas/Fuentes (KEYCODE_TV_INPUT) y abre la pantalla de Entradas del launcher desde cualquier app. |
 | 0.1.15 | Botones de YouTube, Netflix, Prime Video y YouTube Music del control: el servicio escucha el aviso `GLOBAL_BUTTON` de Realtek y las teclas 3003, 3001, 195 y 3025, y abre cada app. Deja registro en logcat (etiqueta TvHomeKeys). Resultado: las teclas no llegan a Android; se quedan en el servicio de Realtek. |
-| 0.1.16 | Receptor declarado en el manifiesto para `ACTION_LAUNCH_APP`, porque Realtek solo envía el aviso si encuentra uno declarado (experimento). |
+| 0.1.16 | Receptor declarado en el manifiesto para `ACTION_LAUNCH_APP` (experimento). Resultado: no llegó nada; el `sendBroadcast` que se veía era `ACTION_HIDE_STORE_WINDOW` de Realtek hacia el modo tienda. |
 
 ## 6. Problemas encontrados y cómo se resolvieron
 
@@ -82,7 +82,8 @@ Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, con foco ini
 ## 7. Pendientes
 
 - ~~Inicio real~~ **hecho (20 oct 2026)**: se desactivaron `launcherx` y `setupwraith` (usuario 0) tras olvidar y reunir el Wi-Fi, para que la red no pertenezca a `setupwraith`. Inicio y micrófono funcionan. Reversible con `scripts\undo-launcher.ps1 -StockLauncher com.google.android.apps.tv.launcherx` y `pm enable` de ambos paquetes.
-- Botones físicos del control: con `launcherx` desactivado, el engranaje manda KEYCODE_NOTIFICATION (83) y Entradas manda KEYCODE_TV_INPUT (178). Ajustes funciona con el servicio de accesibilidad `KeyService` (se activa por ADB: `settings put secure enabled_accessibility_services ec.josue.tvhome/ec.josue.tvhome.KeyService` y `accessibility_enabled 1`; se revierte borrando esos valores). Entradas se prueba en la 0.1.14.
+- Botones físicos del control: con `launcherx` desactivado, el engranaje manda KEYCODE_NOTIFICATION (83) y Entradas manda KEYCODE_TV_INPUT (178). Ajustes funciona con el servicio de accesibilidad `KeyService` (se activa por ADB: `settings put secure enabled_accessibility_services ec.josue.tvhome/ec.josue.tvhome.KeyService` y `accessibility_enabled 1`; se revierte borrando esos valores). Entradas y los botones de YouTube, Netflix, Prime Video y YouTube Music (códigos 178, 3003, 3001, 195, 3025) se quedan dentro del servicio de Realtek (`RtkKeyInterceptService`) y no llegan a ninguna app con el inicio de Google TV desactivado; probado en las versiones 0.1.14 a 0.1.16 (servicio de teclas, aviso `GLOBAL_BUTTON` y receptor de manifiesto). Esas funciones se usan desde la fila inferior y la lista del launcher.
+- Ideas aún sin probar: encuesta del resto de botones del control (colores, Guide, Info) para asignar uno a Entradas; analizar el resto de APK de Realtek (copiados localmente fuera del repositorio; son software propietario y no se suben).
 - Revisar la **posición del icono Wi-Fi** junto al clima (no convence del todo).
 - Validar en el TV real las tarjetas de "Todas las apps" y la sensación de la rueda.
 - Más limpieza opcional: Prime Video, YouTube Music, Kick, Pluto y Apple TV sin confirmar.
