@@ -29,14 +29,16 @@ Paquete: `ec.josue.tvhome`. Dueño: Josué Prieto (`josuenrikee`).
 
 ## 3. Pantallas
 
-- **Inicio:** lista tipo rueda con la app seleccionada adelante y grande, y las demás atrás en contorno. A la derecha, la hora grande apilada (hh sobre mm, 24 horas con cero) con degradado del color de la app y la fecha centrada encima. Arriba a la izquierda, saludo y clima con ciudad.
+- **Inicio:** lista tipo rueda con la app seleccionada adelante y grande, y las demás atrás en contorno. A la derecha, la hora grande apilada (hh sobre mm, con transición al cambiar de minuto) con degradado del color de la app y la fecha centrada encima. Arriba a la izquierda, saludo, campana si hay alarma activa, clima con ciudad e icono de Wi-Fi. Entre el saludo y la fecha, la consola de música cuando algo suena.
 - **Todas las apps:** tarjetas con banner o logo; el nombre aparece solo bajo la tarjeta enfocada. Las apps de sistema se ocultan.
 - **Entradas:** HDMI 1, HDMI 2, AV y TV (antena), en ese orden.
-- **Editar lista:** agregar o quitar apps del inicio, y activar o apagar clima y saludo.
-- **Fila inferior** (Todas las apps, Entradas, Ajustes y Google TV si existe): oculta hasta bajar después de la última app.
-- **Navegación:** Atrás o Inicio devuelven el foco a YouTube. Sin textos de instrucciones en pantalla.
+- **Editar lista:** agregar, quitar, mover y restablecer (con confirmación) apps del inicio; interruptores de clima, saludo, efecto de apertura y alarma; tiempo de reposo (apagado, 5, 10, 15, 30, 60).
+- **Alarma:** lista de hasta 5 alarmas; al editar, hora (modo hora con OK), días, etiqueta y eliminar. Al sonar, pantalla sobre otras apps con botones «apagar» y «posponer 10 min».
+- **Reposo con reloj:** el reloj apilado al centro, la fecha y, con alarma activa, «alarma HH:MM» arriba de la fecha; con música, portada, título y artista abajo a la izquierda y el reloj teñido con el color de la portada.
+- **Fila inferior** (Todas las apps, Entradas, Editar lista, Alarma si está activada, Ajustes y Google TV si existe): oculta hasta bajar después de la última app.
+- **Navegación:** Atrás o Inicio devuelven siempre a la primera app. Sin textos de instrucciones en pantalla.
 
-Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, con foco inicial en YouTube.
+Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, más BitChord al final cuando está instalado.
 
 ## 4. Decisiones de diseño
 
@@ -94,14 +96,12 @@ Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, con foco ini
 
 ## 7. Pendientes
 
-- ~~Inicio real~~ **hecho (20 oct 2026)**: se desactivaron `launcherx` y `setupwraith` (usuario 0) tras olvidar y reunir el Wi-Fi, para que la red no pertenezca a `setupwraith`. Inicio y micrófono funcionan. Reversible con `scripts\undo-launcher.ps1 -StockLauncher com.google.android.apps.tv.launcherx` y `pm enable` de ambos paquetes.
-- Botones físicos del control: con `launcherx` desactivado, el engranaje manda KEYCODE_NOTIFICATION (83) y Entradas manda KEYCODE_TV_INPUT (178). Ajustes funciona con el servicio de accesibilidad `KeyService` (se activa por ADB: `settings put secure enabled_accessibility_services ec.josue.tvhome/ec.josue.tvhome.KeyService` y `accessibility_enabled 1`; se revierte borrando esos valores). Entradas y los botones de YouTube, Netflix, Prime Video y YouTube Music (códigos 178, 3003, 3001, 195, 3025) se quedan dentro del servicio de Realtek (`RtkKeyInterceptService`) y no llegan a ninguna app con el inicio de Google TV desactivado; probado en las versiones 0.1.14 a 0.1.16 (servicio de teclas, aviso `GLOBAL_BUTTON` y receptor de manifiesto). Esas funciones se usan desde la fila inferior y la lista del launcher.
-- Ideas aún sin probar: encuesta del resto de botones del control (colores, Guide, Info) para asignar uno a Entradas; analizar el resto de APK de Realtek (copiados localmente fuera del repositorio; son software propietario y no se suben).
-- Revisar la **posición del icono Wi-Fi** junto al clima (no convence del todo).
-- Validar en el TV real las tarjetas de "Todas las apps" y la sensación de la rueda.
-- Más limpieza opcional: Prime Video, YouTube Music, Kick, Pluto y Apple TV sin confirmar.
-- Al terminar: `scripts\finish.ps1` para cerrar el puerto 5555 y desactivar la depuración.
-- Actualizar la documentación de diseño para reflejar el aspecto final.
+- Confirmar de noche la alarma con la lógica de tiempos automática (opción C): que suene y que el TV se mantenga despierto.
+- Dar la versión por final (1.0) y cerrar con `scripts\finish.ps1` (cierra el puerto 5555 y desactiva la depuración) cuando el dueño lo decida.
+- Revisar a mano si el menú propio del TV (Realtek/KTC) tiene un apagado automático.
+- Ideas sin hacer: título de la consola más ancho (hoy se corta a unos 21 caracteres), estado de señal en Entradas (no se sabe si el firmware lo informa), marcar en «Todas las apps» las ya fijadas, nombres dentro de tarjetas que son solo icono.
+- Limitaciones aceptadas: Entradas y los botones de apps del control (ver sección 10); la alarma no despierta el TV si se apaga con el botón de encendido.
+- Hecho y retirado de esta lista: inicio real, botón de ajustes por `KeyService`, consola, reposo, alarmas completas, BitChord, medición de rendimiento.
 
 ## 8. Cómo seguir
 
@@ -112,7 +112,7 @@ Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, con foco ini
 
 ## 9. Créditos
 
-Herramientas de `tools/` y ejemplos: [CleanYourTV](https://github.com/Gathin23/cleanyourtv) (MIT). Clima: [Open-Meteo](https://open-meteo.com) (CC BY 4.0). Tipografía Bebas Neue: SIL OFL 1.1.
+Herramientas de `tools/` y ejemplos: [CleanYourTV](https://github.com/Gathin23/cleanyourtv) (MIT). Clima: [Open-Meteo](https://open-meteo.com) (CC BY 4.0). Tipografía Bebas Neue: SIL OFL 1.1. BitChord: [kushagrasinghx/BitChord](https://github.com/kushagrasinghx/BitChord), app de terceros instalada aparte. Diseño y desarrollo: Josué Prieto con Claude (Anthropic).
 
 ## 10. Conclusión sobre el inicio real y los botones del control (21 oct 2026)
 
@@ -120,23 +120,16 @@ Herramientas de `tools/` y ejemplos: [CleanYourTV](https://github.com/Gathin23/c
 - Por eso el launcher es el inicio real solo con `launcherx` y `setupwraith` desactivados (usuario 0). Costo: Entradas/Fuentes y los botones de YouTube, Netflix, Prime Video y YouTube Music del control no responden; Inicio, micrófono, Ajustes (por `KeyService`), flechas y Atrás sí.
 - Para volver a Google TV: `pm enable --user 0 com.google.android.apps.tv.launcherx` y `com.google.android.tungsten.setupwraith`, o `scripts\undo-launcher.ps1 -StockLauncher com.google.android.apps.tv.launcherx`. La red `XTRIM-FAMILIA-CARRIONC` se borró al desactivar `setupwraith`.
 
-## 11. Estado al cierre de la sesión del 21 oct 2026 (versión 0.1.26)
+## 11. Estado a 21 oct 2026 (versión 0.1.30)
 
-**Hecho en esta sesión (0.1.19 a 0.1.26):** consola multimedia en el inicio (se oculta a los 3 min en pausa), Inicio/Atrás siempre a la primera app, reposo con reloj ajustable (apagado/5/10/15/30/60 min, por defecto 10; en «Editar lista»), consola en reposo abajo a la izquierda solo con música sonando, y alarma diaria (fila inferior del inicio).
+**Alarma:** AlarmManager.setAlarmClock + servicio en primer plano + pantalla encima de otras apps. Hasta 5 alarmas, días, etiquetas predefinidas, posponer 10 min; sin respuesta suena 10 min, se repite una vez y se rinde. Volumen del sistema fijo al 40 % mientras suena (arranque en silencio, 4 a 40 en 30 s) y se restaura después.
 
-**Alarma (0.1.24 a 0.1.26):** AlarmManager.setAlarmClock + servicio en primer plano + AlarmActivity sobre otras apps. Volumen del sistema fijo en 40 % mientras suena (sube de 4 a 40 en 30 s, arranque en silencio) y se restaura al terminar. Botones en pantalla «apagar» / «posponer 10 min» (flechas + OK; sin botón elegido OK no hace nada). Sin respuesta: suena 10 min, se repite sola una vez 10 min después y se rinde. Con alarma activa el launcher mantiene la pantalla encendida (FLAG_KEEP_SCREEN_ON) y muestra «alarma HH:MM» en el reposo.
+**Tiempos del sistema (opción C):** con una alarma a 12 h o menos, pospuesta, sonando o de prueba, el launcher sube `screen_off_timeout` a 12 h y `sleep_timeout` a 0; si no, los deja en 30 min y 60 min. Requiere por ADB: `appops set ec.josue.tvhome WRITE_SETTINGS allow` y `pm grant ec.josue.tvhome android.permission.WRITE_SECURE_SETTINGS`. Reversible: `settings put system screen_off_timeout 600000` y `settings put secure sleep_timeout 3600000` devuelven los valores de fábrica.
 
-**Hallazgo de la prueba (21 oct):** con el TV suspendido con el botón de encendido (STR de Realtek, `persist.vendor.rtk.forcestr=1`) la alarma NO despierta el equipo: sonó al despertarlo a mano. Por eso la alarma exige dejar el TV en el reposo con reloj, no apagarlo con el control.
+**Hallazgo:** con el TV suspendido con el botón de encendido (STR de Realtek, `persist.vendor.rtk.forcestr=1`) la alarma no despierta el equipo; sonó al despertarlo a mano. Por eso hay que dejarlo en el reposo del launcher. Con la pantalla siempre encendida y los tiempos altos, la alarma de la madrugada del 21 oct sonó bien.
 
-**Ajustes de sistema cambiados por ADB (reversibles):**
-- Protector de pantalla del sistema desactivado (`screensaver_enabled 0`; originales en `scripts\screensaver-original.txt` si se ejecutó ese prompt).
-- Permisos de la alarma: `appops set ec.josue.tvhome SYSTEM_ALERT_WINDOW allow` y lista blanca de batería (`cmd deviceidle whitelist +ec.josue.tvhome`).
-- Solo para la noche del 21 oct: `screen_off_timeout` 43200000 (antes 600000) y `sleep_timeout` 0 (antes 3600000). **Restaurar** con `settings put system screen_off_timeout 600000` y `settings put secure sleep_timeout 3600000` (o automatizar la ventana 22:00 a 10:00 en el launcher).
+**Permisos por ADB de la alarma:** `appops set ec.josue.tvhome SYSTEM_ALERT_WINDOW allow` y `cmd deviceidle whitelist +ec.josue.tvhome`. Reversibles con `default` y `-`.
 
-**Pendientes inmediatos:**
-1. Confirmar de noche si la alarma sonó a la hora, si la pantalla se mantuvo encendida toda la noche y si el arranque del volumen ya no da golpe.
-2. Restaurar los tiempos del sistema o automatizar la ventana 22:00 a 10:00 (opción A: solo FLAG_KEEP_SCREEN_ON acotado al horario; opción B: el launcher cambia los tiempos con WRITE_SETTINGS/WRITE_SECURE_SETTINGS y los restaura).
-3. Alarma completa: varias alarmas, días de la semana, línea «alarma HH:MM» también en el inicio normal (no solo en reposo), restauración del volumen ya implementada.
-4. Posible apagado automático propio de Realtek/KTC en el menú del TV (no visible por ADB): revisarlo a mano.
-5. Cerrar con `scripts\finish.ps1` cuando se dé por terminado (el puerto 5555 sigue abierto).
-6. Medición de rendimiento (21 oct): RAM justa (~420 a 550 MB disponibles, ~360 MB en swap), launcher 88 MB PSS, 8,3 % de cuadros lentos (meta <5 %). Candidato a optimizar el dibujo; sin cambios todavía.
+**Rendimiento (medición del 21 oct):** RAM justa (420 a 550 MB disponibles, ~360 MB en swap), launcher 72 a 88 MB de PSS, 8,3 a 12,7 % de cuadros lentos (meta menor a 5 %). Se cacheó la conversión a minúsculas del texto (0.1.27); queda por volver a medir.
+
+**Evaluación de diseño (0.1.26):** el informe local (nota estimada 8,3/10) respalda la identidad del color por app y recomienda confirmar acciones destructivas, cuidar la franja superior con música y subir el contraste de las apps lejanas. Las decisiones de autor (fila inferior oculta, todo en minúsculas, sin lector de pantalla) se respetan.
