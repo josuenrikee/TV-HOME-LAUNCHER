@@ -7,9 +7,11 @@ import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
@@ -91,6 +93,23 @@ final class LauncherView extends View {
     private final Tween toolsDim = new Tween();
     private final Tween blink = new Tween();
     private final Tween ret = new Tween();
+    private final Tween consoleA = new Tween();
+    private final Tween cFocus = new Tween();
+    private boolean consoleTarget = false, consoleFocus = false, resumed = false;
+    private int cBtn = 1;
+    private final MediaWatcher media;
+    private final Path ctlPath = new Path();
+    private final Matrix artMatrix = new Matrix();
+    private BitmapShader artShader = null;
+    private android.graphics.Bitmap artShaderBmp = null;
+    private String consolePkg = "";
+    private int consoleAcc = 0xFFF6F4F0;
+    private final Runnable progTick = new Runnable() {
+        @Override public void run() {
+            if (resumed && screen == HOME && consoleA.v > .01f && media.playing) invalidate();
+            handler.postDelayed(this, 1000);
+        }
+    };
     private final Tween editScroll = new Tween();
     private int overlay = 0; // 0 nada, 1 abriendo, 2 cubierto, 3 volviendo
     private boolean homeOrigin = true;
@@ -120,6 +139,9 @@ final class LauncherView extends View {
         this.host = host;
         this.store = new AppStore(host);
         this.weather = new Weather(host);
+        this.media = new MediaWatcher(host, new Runnable() {
+            @Override public void run() { syncConsole(); invalidate(); }
+        });
         Typeface cf;
         try { cf = Typeface.createFromAsset(host.getAssets(), "fonts/BebasNeue-Regular.ttf"); }
         catch (Throwable t) { cf = Typeface.create("sans-serif-condensed", Typeface.BOLD); }
@@ -143,13 +165,20 @@ final class LauncherView extends View {
         startCardLoad();
         findStockHome();
         clampSelection();
-        if (overlay == 1 || overlay == 2) {
+        if (overlay != 0) {
+            // Regreso suave: sin el relleno de color, el inicio aparece con un fundido desde oscuro.
             if (openAnim != null) { openAnim.removeAllListeners(); openAnim.cancel(); }
             pending = null;
-            overlay = 3;
-            ret.set(1f);
-            ret.to(0f, 600, LIN, new Runnable() { @Override public void run() { overlay = 0; invalidate(); } });
+            overlay = 0;
+            ret.set(0f);
+            blink.set(1f);
+            blink.to(0f, 520, smooth);
         }
+        resumed = true;
+        media.start();
+        syncConsole();
+        handler.removeCallbacks(progTick);
+        handler.post(progTick);
         handler.removeCallbacks(ticker);
         handler.post(ticker);
         if (store.weather) weather.refreshIfStale(new Runnable() { @Override public void run() { invalidate(); } });
@@ -167,25 +196,78 @@ final class LauncherView extends View {
     }
 
     void onPaused() {
+        resumed = false;
+        media.stop();
+        handler.removeCallbacks(progTick);
         handler.removeCallbacks(ticker);
     }
 
-    /** Se pulsó Inicio con el launcher ya abierto. */
+    /** Se pulsó Inicio: siempre vuelve a la primera app de la lista, con suavidad. */
     void onHomePressed() {
         if (overlay == 1) return;
-        screen = HOME;
+        final int first = homeIndex();
         editMoving = false;
-        inApps = true;
-        app = homeIndex();
-        focusPos.set(app);
-        toolsDim.set(0f);
+        if (consoleFocus) { consoleFocus = false; cFocus.to(0f, 200, LIN); }
+        if (!resumed || overlay != 0) {
+            // Llega desde otra app: el estado queda listo detrás del fundido de entrada.
+            screen = HOME;
+            inApps = true;
+            app = first;
+            focusPos.set(first);
+            toolsDim.set(0f);
+            cFocus.set(0f);
+            consoleFocus = false;
+            invalidate();
+            return;
+        }
+        if (screen != HOME) {
+            go(new Runnable() {
+                @Override public void run() {
+                    screen = HOME;
+                    inApps = true;
+                    app = first;
+                    focusPos.set(first);
+                    toolsDim.set(0f);
+                    clampSelection();
+                }
+            });
+            return;
+        }
+        if (!inApps) { inApps = true; toolsDim.to(0f, 220, smooth); }
+        if (app != first || Math.abs(focusPos.v - first) > .001f) { app = first; scrollWheelTo(first); }
         invalidate();
+    }
+
+    /** Recorre la rueda hasta una posición; dura más cuanto más lejos. */
+    private void scrollWheelTo(int idx) {
+        float dist = Math.abs(focusPos.v - idx);
+        long ms = (long) Math.min(760f, 380f + 80f * dist);
+        focusPos.to(idx, ms, dist > 2.2f ? smooth : wheel);
+    }
+
+    /** Muestra u oculta la mini consola según haya algo sonando. */
+    private void syncConsole() {
+        boolean on = media.visible();
+        if (on != consoleTarget) {
+            consoleTarget = on;
+            consoleA.to(on ? 1f : 0f, 350, smooth);
+        }
+        if (!on && consoleFocus) {
+            consoleFocus = false;
+            cFocus.to(0f, 200, LIN);
+        }
     }
 
     /** Lo pide el servicio de teclas al pulsar Entradas/Fuentes del control, desde cualquier app. */
     void openInputsFromKey() {
         if (overlay == 1) return;
-        onHomePressed();
+        editMoving = false;
+        consoleFocus = false;
+        cFocus.set(0f);
+        inApps = true;
+        app = homeIndex();
+        focusPos.set(app);
+        toolsDim.set(0f);
         loadInputs();
         hdmiIdx = 0;
         screen = HDMI;
@@ -220,6 +302,7 @@ final class LauncherView extends View {
     private void tick() {
         Date now = new Date();
         clockStr = fmtClock.format(now);
+        syncConsole();
         dateStr = fmtDate.format(now);
         int h = 12;
         try { h = Integer.parseInt(fmtHour.format(now)); } catch (NumberFormatException ignored) { }
@@ -280,27 +363,28 @@ final class LauncherView extends View {
 
     private static final int UP = 1, DOWN = 2, LEFT = 3, RIGHT = 4, OK = 5, LONG = 6, BACK = 7;
 
-    /** Posición de YouTube en la lista (estado inicial del inicio); si no está, la primera. */
+    /** Punto de reposo del inicio: siempre la primera app de la lista. */
     private int homeIndex() {
-        for (int i = 0; i < store.pinned.size(); i++) {
-            if (store.pinned.get(i).pkg.startsWith("com.google.android.youtube")) return i;
-        }
         return 0;
     }
 
     private void keyHome(int k) {
         int n = Math.max(1, store.pinned.size());
+        if (consoleFocus) { keyConsole(k); return; }
         if (k == BACK) {
-            if (!inApps) {
-                inApps = true;
-                toolsDim.to(0f, 200, LIN);
-                app = homeIndex();
-                focusPos.to(app, 420, wheel);
-            }
+            // Atrás vuelve siempre a la primera app, desde la fila inferior o desde cualquier posición.
+            if (!inApps) { inApps = true; toolsDim.to(0f, 220, smooth); }
+            int first = homeIndex();
+            if (app != first || Math.abs(focusPos.v - first) > .001f) { app = first; scrollWheelTo(first); }
             return;
         }
         if (inApps) {
             if (k == UP && app > 0) { app--; focusPos.to(app, 420, wheel); }
+            else if (k == UP && consoleTarget && consoleA.v > .5f) {
+                consoleFocus = true;
+                cBtn = 1;
+                cFocus.to(1f, 220, smooth);
+            }
             else if (k == DOWN) {
                 if (app < n - 1) { app++; focusPos.to(app, 420, wheel); }
                 else { inApps = false; toolsDim.to(1f, 200, LIN); }
@@ -313,6 +397,17 @@ final class LauncherView extends View {
             else if (k == RIGHT && tool < TOOLS.length - 1) tool++;
             else if (k == UP) { inApps = true; toolsDim.to(0f, 200, LIN); }
             else if (k == OK || k == LONG) enterTool(tool);
+        }
+    }
+
+    private void keyConsole(int k) {
+        if (k == BACK || k == DOWN) { consoleFocus = false; cFocus.to(0f, 220, smooth); return; }
+        if (k == LEFT && cBtn > 0) cBtn--;
+        else if (k == RIGHT && cBtn < 2) cBtn++;
+        else if (k == OK || k == LONG) {
+            if (cBtn == 0) media.prev();
+            else if (cBtn == 1) media.toggle();
+            else media.next();
         }
     }
 
@@ -475,15 +570,15 @@ final class LauncherView extends View {
 
     private void go(final Runnable r) {
         if (!store.anim) { r.run(); invalidate(); return; }
-        lockUntil = SystemClock.uptimeMillis() + 560;
-        blink.to(1f, 200, LIN, null);
+        lockUntil = SystemClock.uptimeMillis() + 480;
+        blink.to(1f, 150, smooth, null);
         handler.postDelayed(new Runnable() {
             @Override public void run() {
                 r.run();
-                blink.to(0f, 320, LIN, null);
+                blink.to(0f, 320, smooth, null);
                 invalidate();
             }
-        }, 220);
+        }, 160);
     }
 
     private void startOpen(AppEntry e, boolean fromHome) {
@@ -640,7 +735,7 @@ final class LauncherView extends View {
         float restA = 1f;          // transparencia de las filas no seleccionadas
         float selA = 1f;           // transparencia de la fila seleccionada
         float chromeA = 1f;
-        float barA = 1f - toolsDim.v;
+        float barA = (1f - toolsDim.v) * (1f - cFocus.v);
         if (overlay == 1) {
             restA = 1f - clamp01(openMs / 180f);
             selA = 1f - clamp01((openMs - 520f) / 240f);
@@ -650,7 +745,7 @@ final class LauncherView extends View {
             restA = 0f; selA = 0f; chromeA = 0f; barA = 0f;
         } else if (overlay == 3) {
             restA = selA = chromeA = 1f - ret.v;
-            barA = (1f - ret.v) * (1f - toolsDim.v);
+            barA = (1f - ret.v) * (1f - toolsDim.v) * (1f - cFocus.v);
         }
         float glowA = (overlay == 1) ? (1f - clamp01(openMs / 260f)) * (1f - toolsDim.v) : (overlay == 0 ? 1f - .55f * toolsDim.v : barA);
 
@@ -688,6 +783,7 @@ final class LauncherView extends View {
                 float op = distAlpha(dist);
                 float opTools = dist < .5f ? .55f : op * .8f;
                 op = op + (opTools - op) * toolsDim.v;
+                op *= 1f - .6f * cFocus.v;
                 float foc = clamp01(1f - dist);
                 boolean sel = i == app;
                 float a;
@@ -785,6 +881,7 @@ final class LauncherView extends View {
             wifiX = 112f + w + tw(" · Guayaquil", medium, 44f, -.01f);
         }
         drawBigClock(c, accent, a);
+        drawConsole(c, a);
 
         // fila inferior: oculta mientras se exploran las apps, aparece al bajar del final de la lista
         float ra = a * toolsDim.v;
@@ -806,6 +903,134 @@ final class LauncherView extends View {
         }
         // red: solo el icono, discreto, a la derecha del clima
         drawWifi(c, wifiX + 15f, 166f, a * .75f, netOk);
+    }
+
+    private int consoleAccent() {
+        if (!media.pkg.equals(consolePkg)) {
+            consolePkg = media.pkg;
+            consoleAcc = TXT;
+            for (AppEntry e : store.installed) {
+                if (e.pkg.equals(consolePkg) && e.accent != 0) { consoleAcc = e.accent | 0xFF000000; break; }
+            }
+        }
+        return consoleAcc;
+    }
+
+    /** Mini consola de multimedia entre el saludo y la fecha: portada, título, artista y controles. */
+    private void drawConsole(Canvas c, float a) {
+        float ca = a * consoleA.v;
+        if (ca < .004f) return;
+        int ac = consoleAccent();
+        final float x0 = 520f, cy = 150f, cs = 96f, cy0 = cy - cs / 2f;
+        // portada
+        rect.set(x0, cy0, x0 + cs, cy0 + cs);
+        android.graphics.Bitmap art = media.art;
+        if (art != null) {
+            if (artShader == null || artShaderBmp != art) {
+                artShader = new BitmapShader(art, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                artShaderBmp = art;
+            }
+            artMatrix.setScale(cs / art.getWidth(), cs / art.getHeight());
+            artMatrix.postTranslate(x0, cy0);
+            artShader.setLocalMatrix(artMatrix);
+            fill.setColor(0xFFFFFFFF);
+            fill.setShader(artShader);
+            fill.setAlpha((int) (255 * ca));
+            c.drawRoundRect(rect, 12f, 12f, fill);
+            fill.setShader(null);
+        } else {
+            fill.setShader(null);
+            fill.setColor(ac | 0xFF000000);
+            fill.setAlpha((int) (255 * ca * .9f));
+            c.drawRoundRect(rect, 12f, 12f, fill);
+            p.setShader(null);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(5f);
+            p.setColor(0xFF0A0A0B);
+            p.setAlpha((int) (255 * ca * .55f));
+            c.drawCircle(x0 + cs / 2f, cy, 24f, p);
+            p.setStyle(Paint.Style.FILL);
+            c.drawCircle(x0 + cs / 2f, cy, 6f, p);
+        }
+        // texto
+        final float tx = x0 + cs + 24f, tw0 = 340f;
+        text(c, fit(media.title, bold, 36f, -.02f, tw0), tx, 132f, bold, 36f, TXT, ca, -.02f, Paint.Align.LEFT);
+        text(c, fit(media.artist, medium, 28f, 0f, tw0), tx, 170f, medium, 28f, SOFT, ca, 0f, Paint.Align.LEFT);
+        // progreso
+        fill.setShader(null);
+        fill.setColor(0xFFF6F4F0);
+        fill.setAlpha((int) (255 * ca * .14f));
+        rect.set(tx, 190f, tx + tw0, 194f);
+        c.drawRoundRect(rect, 2f, 2f, fill);
+        float pr = media.progress();
+        if (pr > 0f) {
+            fill.setColor(ac | 0xFF000000);
+            fill.setAlpha((int) (255 * ca));
+            rect.set(tx, 190f, tx + Math.max(4f, tw0 * pr), 194f);
+            c.drawRoundRect(rect, 2f, 2f, fill);
+        }
+        // controles
+        drawCtl(c, 0, 1062f, cy, 32f, ca, consoleFocus && cBtn == 0, ac);
+        drawCtl(c, 1, 1146f, cy, 36f, ca, consoleFocus && cBtn == 1, ac);
+        drawCtl(c, 2, 1230f, cy, 32f, ca, consoleFocus && cBtn == 2, ac);
+    }
+
+    private void drawCtl(Canvas c, int kind, float cx, float cy, float r, float ca, boolean foc, int ac) {
+        p.setShader(null);
+        if (foc && kind == 1) {
+            fill.setShader(null);
+            fill.setColor(ac | 0xFF000000);
+            fill.setAlpha((int) (255 * ca));
+            c.drawCircle(cx, cy, r, fill);
+        } else if (foc) {
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(3f);
+            p.setColor(ac | 0xFF000000);
+            p.setAlpha((int) (255 * ca));
+            c.drawCircle(cx, cy, r - 1.5f, p);
+        } else if (kind == 1) {
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(3f);
+            p.setColor(0xFFF6F4F0);
+            p.setAlpha((int) (255 * ca * .35f));
+            c.drawCircle(cx, cy, r - 1.5f, p);
+        }
+        p.setStyle(Paint.Style.FILL);
+        p.setColor((foc && kind == 1 ? 0xFF0A0A0B : (foc ? TXT : SOFT)) | 0xFF000000);
+        p.setAlpha((int) (255 * ca * (foc ? 1f : .9f)));
+        if (kind == 1) {
+            if (media.playing) {
+                rect.set(cx - 12f, cy - 14f, cx - 3f, cy + 14f);
+                c.drawRoundRect(rect, 3f, 3f, p);
+                rect.set(cx + 3f, cy - 14f, cx + 12f, cy + 14f);
+                c.drawRoundRect(rect, 3f, 3f, p);
+            } else {
+                ctlPath.reset();
+                ctlPath.moveTo(cx - 8f, cy - 15f);
+                ctlPath.lineTo(cx + 14f, cy);
+                ctlPath.lineTo(cx - 8f, cy + 15f);
+                ctlPath.close();
+                c.drawPath(ctlPath, p);
+            }
+        } else if (kind == 0) {
+            rect.set(cx - 15f, cy - 13f, cx - 11f, cy + 13f);
+            c.drawRoundRect(rect, 2f, 2f, p);
+            ctlPath.reset();
+            ctlPath.moveTo(cx + 14f, cy - 13f);
+            ctlPath.lineTo(cx - 6f, cy);
+            ctlPath.lineTo(cx + 14f, cy + 13f);
+            ctlPath.close();
+            c.drawPath(ctlPath, p);
+        } else {
+            rect.set(cx + 11f, cy - 13f, cx + 15f, cy + 13f);
+            c.drawRoundRect(rect, 2f, 2f, p);
+            ctlPath.reset();
+            ctlPath.moveTo(cx - 14f, cy - 13f);
+            ctlPath.lineTo(cx + 6f, cy);
+            ctlPath.lineTo(cx - 14f, cy + 13f);
+            ctlPath.close();
+            c.drawPath(ctlPath, p);
+        }
     }
 
     private void drawWifi(Canvas c, float x, float y, float a, boolean ok) {
