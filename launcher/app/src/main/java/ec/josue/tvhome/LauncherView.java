@@ -1420,14 +1420,15 @@ final class LauncherView extends View {
                 }
             } else if (right != null) {
                 if (idx == n + 5) {
-                    // siempre se ven las seis opciones; la activa va rellena, también con la fila sin enfocar
-                    float xr = 1808f;
-                    int[] o = AppStore.REST_OPTIONS;
-                    for (int j = o.length - 1; j >= 0; j--) {
-                        boolean act = o[j] == store.restMin;
-                        float al = on ? 1f : (act ? .55f : .42f);
-                        xr = chip(c, restLabel(o[j]), xr, y + 8f, act, al) - 10f;
-                    }
+                    if (on) {
+                        // enfocada: las seis opciones, la activa rellena y las demás apagadas
+                        float xr = 1808f;
+                        int[] o = AppStore.REST_OPTIONS;
+                        for (int j = o.length - 1; j >= 0; j--) {
+                            boolean act = o[j] == store.restMin;
+                            xr = chip(c, restLabel(o[j]), xr, y + 8f, act, act ? 1f : .5f) - 10f;
+                        }
+                    } else text(c, right, 1808f, y + 44f, medium, 28f, SOFT, a, 0f, Paint.Align.RIGHT);
                 }
                 else if (idx >= n + 2) drawSwitch(c, 1808f - 88f, y + 4f, chipOn, a);
                 else text(c, right, 1808f, y + 44f, medium, 28f, SOFT, a, 0f, Paint.Align.RIGHT);
