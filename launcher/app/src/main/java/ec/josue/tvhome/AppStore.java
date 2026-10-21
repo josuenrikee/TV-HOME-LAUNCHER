@@ -21,6 +21,8 @@ final class AppStore {
 
     private static final String KEY_PINNED = "pinned";
     private static final String KEY_INIT = "init";
+    private static final String KEY_LISTV = "listv";
+    private static final int LIST_VERSION = 2;
     private static final String KEY_WEATHER = "weather";
     private static final String KEY_GREETING = "greeting";
     private static final String KEY_ANIM = "anim";
@@ -70,15 +72,19 @@ final class AppStore {
             @Override public int compare(AppEntry a, AppEntry b) { return col.compare(a.label, b.label); }
         });
 
-        if (!sp.getBoolean(KEY_INIT, false) && !installed.isEmpty()) {
+        if ((!sp.getBoolean(KEY_INIT, false) || sp.getInt(KEY_LISTV, 0) < LIST_VERSION) && !installed.isEmpty()) {
             List<String> defaults = new ArrayList<>();
-            addDefault(defaults, "com.netflix.ninja", "com.netflix.mediaclient");
+            for (AppEntry e : installed) {
+                String l = e.label.toLowerCase(Locale.ROOT);
+                if (e.pkg.equals("com.wbd.stream") || e.pkg.startsWith("com.hbo") || l.contains("hbo") || l.equals("max")) { defaults.add(e.pkg); break; }
+            }
             addDefault(defaults, "com.google.android.youtube.tv", "com.google.android.youtube");
-            addDefault(defaults, "com.disney.disneyplus");
             for (AppEntry e : installed) {
                 if (e.label.toLowerCase(Locale.ROOT).contains("xuper")) { defaults.add(e.pkg); break; }
             }
-            sp.edit().putString(KEY_PINNED, join(defaults)).putBoolean(KEY_INIT, true).apply();
+            addDefault(defaults, "com.netflix.ninja", "com.netflix.mediaclient");
+            addDefault(defaults, "com.disney.disneyplus");
+            sp.edit().putString(KEY_PINNED, join(defaults)).putBoolean(KEY_INIT, true).putInt(KEY_LISTV, LIST_VERSION).apply();
         }
 
         pinned.clear();

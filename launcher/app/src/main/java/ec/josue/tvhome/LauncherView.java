@@ -120,6 +120,8 @@ final class LauncherView extends View {
         fmtHour.setTimeZone(tz);
         p.setStrokeJoin(Paint.Join.ROUND);
         store.refresh();
+        app = homeIndex();
+        focusPos.set(app);
         tick();
     }
 
@@ -152,6 +154,7 @@ final class LauncherView extends View {
         screen = HOME;
         editMoving = false;
         inApps = true;
+        app = homeIndex();
         focusPos.set(app);
         toolsDim.set(0f);
         invalidate();
@@ -188,7 +191,8 @@ final class LauncherView extends View {
         dateStr = fmtDate.format(now);
         int h = 12;
         try { h = Integer.parseInt(fmtHour.format(now)); } catch (NumberFormatException ignored) { }
-        greetStr = h < 12 ? "Buenos días" : (h < 19 ? "Buenas tardes" : "Buenas noches");
+        greetStr = (h >= 5 && h < 12) ? "Buenos días" : ((h >= 12 && h < 19) ? "Buenas tardes" : "Buenas noches");
+        checkNet();
         if (store.weather) weather.refreshIfStale(new Runnable() { @Override public void run() { invalidate(); } });
         invalidate();
     }
@@ -232,8 +236,25 @@ final class LauncherView extends View {
 
     private static final int UP = 1, DOWN = 2, LEFT = 3, RIGHT = 4, OK = 5, LONG = 6, BACK = 7;
 
+    /** Posición de YouTube en la lista (estado inicial del inicio); si no está, la primera. */
+    private int homeIndex() {
+        for (int i = 0; i < store.pinned.size(); i++) {
+            if (store.pinned.get(i).pkg.startsWith("com.google.android.youtube")) return i;
+        }
+        return 0;
+    }
+
     private void keyHome(int k) {
         int n = Math.max(1, store.pinned.size());
+        if (k == BACK) {
+            if (!inApps) {
+                inApps = true;
+                toolsDim.to(0f, 200, LIN);
+                app = homeIndex();
+                focusPos.to(app, 320, smooth);
+            }
+            return;
+        }
         if (inApps) {
             if (k == UP && app > 0) { app--; focusPos.to(app, 320, smooth); }
             else if (k == DOWN) {
@@ -479,11 +500,30 @@ final class LauncherView extends View {
                 CharSequence nm = info.loadCustomLabel(host);
                 if (nm == null || nm.length() == 0) nm = info.loadLabel(host);
                 inputs.add(info);
-                inputNames.add(tuner ? "TV en vivo (antena)" : (nm == null ? info.getId() : nm.toString()));
+                inputNames.add(tuner ? "TV (antena)" : (nm == null ? info.getId() : nm.toString()));
+            }
+            // Orden fijo: HDMI 1, HDMI 2, AV y TV (antena).
+            for (int i = 1; i < inputs.size(); i++) {
+                for (int j = i; j > 0 && inputRank(inputNames.get(j)) < inputRank(inputNames.get(j - 1)); j--) {
+                    TvInputInfo ti = inputs.get(j); inputs.set(j, inputs.get(j - 1)); inputs.set(j - 1, ti);
+                    String tn = inputNames.get(j); inputNames.set(j, inputNames.get(j - 1)); inputNames.set(j - 1, tn);
+                }
             }
         } catch (Exception ignored) {
             // El TV no deja ver sus entradas a las apps: la pantalla muestra el aviso.
         }
+    }
+
+    private static float inputRank(String name) {
+        String n = name.toLowerCase(Locale.ROOT);
+        if (n.contains("hdmi")) {
+            float d = 9f;
+            for (int i = 0; i < n.length(); i++) { char ch = n.charAt(i); if (ch >= '0' && ch <= '9') { d = ch - '0'; break; } }
+            return d / 10f;
+        }
+        if (n.contains("antena")) return 3f;
+        if (n.equals("av") || n.contains("av ") || n.startsWith("av") || n.contains("compuesto") || n.contains("composite")) return 2f;
+        return 2.5f;
     }
 
     private void switchInput(TvInputInfo info, String name) {
@@ -640,30 +680,29 @@ final class LauncherView extends View {
         text(c, clockStr, 1808f, 168f, mono, 104f, TXT, a, -.04f, Paint.Align.RIGHT);
         text(c, dateStr, 1808f, 232f, medium, 38f, SOFT, a, 0f, Paint.Align.RIGHT);
 
-        // fila inferior
-        float x = 112f;
-        for (int j = 0; j < TOOLS.length; j++) {
-            boolean f = !inApps && j == tool;
-            float w = tw(TOOLS[j], medium, 36f, 0f);
-            float ta = a * (f ? 1f : .78f);
-            text(c, TOOLS[j], x, 988f, medium, 36f, f ? TXT : SOFT, ta, 0f, Paint.Align.LEFT);
-            if (f) {
-                fill.setShader(null);
-                fill.setColor(TOOL_ACCENT[j]);
-                fill.setAlpha((int) (255 * a));
-                c.drawRect(x, 1005f, x + w, 1008f, fill);
+        // fila inferior: oculta mientras se exploran las apps, aparece al bajar del final de la lista
+        float ra = a * toolsDim.v;
+        if (ra > 0.003f) {
+            float x = 112f;
+            for (int j = 0; j < TOOLS.length; j++) {
+                boolean f = !inApps && j == tool;
+                float w = tw(TOOLS[j], medium, 28f, 0f);
+                float ta = ra * (f ? 1f : .7f);
+                text(c, TOOLS[j], x, 992f, medium, 28f, f ? TXT : SOFT, ta, 0f, Paint.Align.LEFT);
+                if (f) {
+                    fill.setShader(null);
+                    fill.setColor(TOOL_ACCENT[j]);
+                    fill.setAlpha((int) (255 * ra));
+                    c.drawRect(x, 1004f, x + w, 1006f, fill);
+                }
+                x += w + 44f;
             }
-            x += w + 56f;
         }
-        // ayuda y red
-        String hint = inApps ? "↑ ↓ EXPLORAR · OK ABRIR" : "← → ELEGIR · OK ENTRAR";
-        text(c, hint, 1808f, 962f, mono, 22f, MUTED, a, .1f, Paint.Align.RIGHT);
-        String net = networkLabel();
-        text(c, net, 1808f, 1010f, mono, 22f, MUTED, a, .06f, Paint.Align.RIGHT);
-        drawWifi(c, 1808f - tw(net, mono, 22f, .06f) - 44f, 984f, a);
+        // red: solo el icono, discreto
+        drawWifi(c, 1808f - 30f, 992f, a * .75f, netOk);
     }
 
-    private void drawWifi(Canvas c, float x, float y, float a) {
+    private void drawWifi(Canvas c, float x, float y, float a, boolean ok) {
         p.setShader(null);
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeWidth(2.4f);
@@ -678,17 +717,23 @@ final class LauncherView extends View {
         }
         p.setStyle(Paint.Style.FILL);
         c.drawCircle(cx, cy - 1f, 1.8f, p);
+        if (!ok) {
+            p.setStyle(Paint.Style.STROKE);
+            c.drawLine(cx + 12f, cy - 8f, cx + 24f, cy + 4f, p);
+            c.drawLine(cx + 24f, cy - 8f, cx + 12f, cy + 4f, p);
+            p.setStyle(Paint.Style.FILL);
+        }
     }
 
-    private String networkLabel() {
+    private boolean netOk = true;
+
+    private void checkNet() {
         try {
             ConnectivityManager cm = (ConnectivityManager) host.getSystemService(Context.CONNECTIVITY_SERVICE);
             NetworkInfo ni = cm == null ? null : cm.getActiveNetworkInfo();
-            if (ni == null || !ni.isConnected()) return "Sin conexión";
-            if (ni.getType() == ConnectivityManager.TYPE_ETHERNET) return "Ethernet conectado";
-            return "Wi-Fi conectado";
+            netOk = ni != null && ni.isConnected();
         } catch (Exception e) {
-            return "Wi-Fi";
+            netOk = true;
         }
     }
 
@@ -732,12 +777,10 @@ final class LauncherView extends View {
         if (screen == ALL) {
             header(c, "APLICACIONES", "Todas las apps");
             drawGrid(c, store.installed, allIdx, allTop, true);
-            hintBottom(c, "← → ↑ ↓ ELEGIR · OK ABRIR · MANTÉN OK PARA FIJAR EN INICIO · ATRÁS VOLVER");
         } else if (screen == PICK) {
             header(c, "EDITAR LISTA", "Agregar app");
             if (pickList.isEmpty()) text(c, "Ya agregaste todas las apps.", 112f, 420f, bold, 56f, SOFT, 1f, -.03f, Paint.Align.LEFT);
             else drawGrid(c, pickList, pickIdx, pickTop, false);
-            hintBottom(c, "← → ↑ ↓ ELEGIR · OK AGREGAR AL FINAL · ATRÁS VOLVER");
         } else if (screen == HDMI) {
             header(c, "ENTRADAS", "Entradas");
             if (inputs.isEmpty()) {
@@ -753,7 +796,6 @@ final class LauncherView extends View {
                     text(c, inputNames.get(i), 112f, y + 74f, bold, 72f, TXT, a, -.035f, Paint.Align.LEFT);
                 }
             }
-            hintBottom(c, "↑ ↓ ELEGIR · OK CAMBIAR DE ENTRADA · ATRÁS VOLVER");
         } else {
             drawEdit(c);
         }
@@ -763,10 +805,6 @@ final class LauncherView extends View {
         text(c, kicker, 112f, 118f, mono, 24f, MUTED, 1f, .16f, Paint.Align.LEFT);
         text(c, title, 112f, 192f, bold, 96f, TXT, 1f, -.04f, Paint.Align.LEFT);
         text(c, clockStr, 1808f, 142f, mono, 52f, SOFT, 1f, -.03f, Paint.Align.RIGHT);
-    }
-
-    private void hintBottom(Canvas c, String s) {
-        text(c, s, 112f, 1016f, mono, 22f, MUTED, 1f, .1f, Paint.Align.LEFT);
     }
 
     private void bar(Canvas c, float x, float y, int color, float w, float h) {
@@ -817,7 +855,7 @@ final class LauncherView extends View {
             boolean chipOn = false;
             if (idx < n) { accent = store.pinned.get(idx).accent; label = store.pinned.get(idx).label; }
             else if (idx == n) { label = "+ Agregar app"; right = n >= AppStore.MAX_PINNED ? "Máximo " + AppStore.MAX_PINNED : null; }
-            else if (idx == n + 1) { label = "Restablecer lista"; right = "Netflix · YouTube · Disney+ · Xuper"; }
+            else if (idx == n + 1) { label = "Restablecer lista"; right = "HBO Max · YouTube · Xuper · Netflix · Disney+"; }
             else if (idx == n + 2) { label = "Clima en inicio"; chipOn = store.weather; right = chipOn ? "Activado" : "Apagado"; }
             else if (idx == n + 3) { label = "Saludo según la hora"; chipOn = store.greeting; right = chipOn ? "Activado" : "Apagado"; }
             else { label = "Efecto de apertura"; chipOn = store.anim; right = chipOn ? "Activado" : "Apagado"; }
@@ -832,7 +870,7 @@ final class LauncherView extends View {
             }
             text(c, label, tx, y + 46f, bold, 44f, TXT, a, -.035f, Paint.Align.LEFT);
             if (idx < n && on) {
-                if (editMoving) chip(c, "↑ ↓ MOVIENDO · OK LISTO", 1808f, y + 8f, true);
+                if (editMoving) chip(c, "MOVIENDO", 1808f, y + 8f, true);
                 else {
                     float x2 = chip(c, "QUITAR", 1808f, y + 8f, editCol == 1);
                     chip(c, "MOVER", x2 - 14f, y + 8f, editCol == 0);
@@ -843,7 +881,6 @@ final class LauncherView extends View {
             }
         }
         c.restore();
-        hintBottom(c, editMoving ? "↑ ↓ MOVER · OK O ATRÁS PARA TERMINAR" : "↑ ↓ ELEGIR · OK MOVER · → QUITAR · ATRÁS LISTO");
     }
 
     /** Dibuja una etiqueta alineada a la derecha en xRight y devuelve su borde izquierdo. */
