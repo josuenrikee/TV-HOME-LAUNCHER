@@ -25,6 +25,10 @@ Hecho para un Innova 32″ de 1 GB de RAM y pensado para repetirse en otros TVs.
 Todo se puede deshacer: las apps se **desactivan**, no se desinstalan, y `scripts\undo-launcher.ps1` y
 `tools\restore.ps1` devuelven el estado anterior.
 
+## Resumen completo
+
+Todo el historial de versiones, las decisiones de diseño, los problemas resueltos y lo pendiente están en [docs/RESUMEN.md](docs/RESUMEN.md).
+
 ## El APK
 
 Lo compila GitHub Actions en cada cambio de `launcher/` y lo publica en
