@@ -586,8 +586,8 @@ final class LauncherView extends View {
             if (alarmRow == 0) { alarmOn = !alarmOn; saveAlarm(); }
             else if (alarmRow == 1) { alarmEditing = true; alarmCol = 0; }
             else {
-                AlarmStore.once(host, System.currentTimeMillis() + 120000L);
-                toast("Sonará en 2 minutos");
+                AlarmStore.once(host, System.currentTimeMillis() + 60000L, 1);
+                toast("Sonará en 1 minuto");
             }
         }
     }
@@ -1373,7 +1373,7 @@ final class LauncherView extends View {
         // fila 2: probar
         boolean on2 = alarmRow == 2;
         if (on2) bar(c, 78f, 790f + 10f, 0xFFE0A21B, 8f, 44f);
-        text(c, "Probar en 2 minutos", 112f, 836f, bold, 44f, TXT, on2 ? 1f : .42f, -.035f, Paint.Align.LEFT);
+        text(c, "Probar en 1 minuto", 112f, 836f, bold, 44f, TXT, on2 ? 1f : .42f, -.035f, Paint.Align.LEFT);
         if (alarmOn) text(c, alarmWhen(), 112f, 920f, medium, 30f, MUTED, 1f, 0f, Paint.Align.LEFT);
     }
 

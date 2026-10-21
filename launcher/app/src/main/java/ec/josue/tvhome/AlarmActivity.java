@@ -46,8 +46,14 @@ public class AlarmActivity extends Activity {
     @Override public boolean onKeyDown(int k, KeyEvent e) {
         if (k == KeyEvent.KEYCODE_VOLUME_UP || k == KeyEvent.KEYCODE_VOLUME_DOWN || k == KeyEvent.KEYCODE_VOLUME_MUTE) return super.onKeyDown(k, e);
         if (e.getRepeatCount() > 0) return true;
-        if (k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER || k == KeyEvent.KEYCODE_NUMPAD_ENTER) { send(AlarmService.ACT_STOP); return true; }
-        if (k == KeyEvent.KEYCODE_DPAD_DOWN) { send(AlarmService.ACT_SNOOZE); return true; }
+        AlarmView v = (AlarmView) view;
+        if (k == KeyEvent.KEYCODE_DPAD_LEFT) { v.sel = 0; v.invalidate(); }
+        else if (k == KeyEvent.KEYCODE_DPAD_RIGHT) { v.sel = 1; v.invalidate(); }
+        else if (k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_ENTER || k == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+            // solo actúa si antes se eligió un botón con las flechas
+            if (v.sel == 0) send(AlarmService.ACT_STOP);
+            else if (v.sel == 1) send(AlarmService.ACT_SNOOZE);
+        }
         return true;
     }
 
@@ -59,6 +65,8 @@ public class AlarmActivity extends Activity {
     @Override public void onBackPressed() { }
 
     private static final class AlarmView extends View {
+        int sel = -1;
+        private final android.graphics.RectF r = new android.graphics.RectF();
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Typeface clock;
         private final SimpleDateFormat f = new SimpleDateFormat("HH:mm", Locale.ROOT);
@@ -89,9 +97,26 @@ public class AlarmActivity extends Activity {
             c.drawText(f.format(new Date()), 960f, 700f, p);
             p.setLetterSpacing(0f);
             p.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-            p.setTextSize(36f);
-            p.setColor(0xFFC9C6C0);
-            c.drawText("OK  apagar        ·        abajo  posponer " + AlarmStore.SNOOZE_MIN + " min", 960f, 900f, p);
+            btn(c, "apagar", 520f, 820f, 440f, sel == 0);
+            btn(c, "posponer " + AlarmStore.SNOOZE_MIN + " min", 1000f, 820f, 440f, sel == 1);
+            p.setTextSize(30f);
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(0xFF8E8C87);
+            p.setTextAlign(Paint.Align.CENTER);
+            c.drawText(sel < 0 ? "elige con las flechas izquierda y derecha, y confirma con OK" : "OK para confirmar", 960f, 1000f, p);
+        }
+
+        private void btn(Canvas c, String s, float x, float y, float w, boolean on) {
+            r.set(x, y, x + w, y + 110f);
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(0xFFF6F4F0);
+            p.setAlpha(on ? 255 : 34);
+            c.drawRoundRect(r, 10f, 10f, p);
+            p.setTextSize(44f);
+            p.setTextAlign(Paint.Align.CENTER);
+            p.setColor(on ? 0xFF0A0A0B : 0xFFF6F4F0);
+            p.setAlpha(255);
+            c.drawText(s, x + w / 2f, y + 70f, p);
         }
     }
 }

@@ -39,27 +39,27 @@ final class AlarmStore {
         return cal.getTimeInMillis();
     }
 
-    private static PendingIntent ringIntent(Context c, int req) {
-        Intent i = new Intent(c, AlarmReceiver.class).setAction(ACT_RING).putExtra("daily", req == 1);
+    private static PendingIntent ringIntent(Context c, int req, int round) {
+        Intent i = new Intent(c, AlarmReceiver.class).setAction(ACT_RING).putExtra("daily", req == 1).putExtra("round", round);
         return PendingIntent.getBroadcast(c, req, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
-    private static void setClock(Context c, long when, int req) {
+    private static void setClock(Context c, long when, int req, int round) {
         AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
         if (am == null) return;
         PendingIntent show = PendingIntent.getActivity(c, 0, new Intent(c, MainActivity.class),
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        am.setAlarmClock(new AlarmManager.AlarmClockInfo(when, show), ringIntent(c, req));
+        am.setAlarmClock(new AlarmManager.AlarmClockInfo(when, show), ringIntent(c, req, round));
     }
 
     /** (Re)programa la alarma diaria, o la cancela si está apagada. */
     static void schedule(Context c) {
         AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
         if (am == null) return;
-        if (enabled(c)) setClock(c, nextTrigger(c), 1);
-        else am.cancel(ringIntent(c, 1));
+        if (enabled(c)) setClock(c, nextTrigger(c), 1, 1);
+        else am.cancel(ringIntent(c, 1, 1));
     }
 
-    /** Un aviso único: posponer o prueba. */
-    static void once(Context c, long when) { setClock(c, when, 2); }
+    /** Un aviso único: posponer o prueba. round 1 = primera vez, 2 = repetición automática (la última). */
+    static void once(Context c, long when, int round) { setClock(c, when, 2, round); }
 }

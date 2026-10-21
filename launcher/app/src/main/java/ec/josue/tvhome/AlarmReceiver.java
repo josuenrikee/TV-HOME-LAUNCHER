@@ -10,7 +10,7 @@ public class AlarmReceiver extends BroadcastReceiver {
         String a = in == null ? null : in.getAction();
         if (AlarmStore.ACT_RING.equals(a)) {
             if (in.getBooleanExtra("daily", false)) AlarmStore.schedule(ctx);
-            try { ctx.startForegroundService(new Intent(ctx, AlarmService.class)); } catch (Exception ignored) { }
+            try { ctx.startForegroundService(new Intent(ctx, AlarmService.class).putExtra("round", in.getIntExtra("round", 1))); } catch (Exception ignored) { }
         } else {
             AlarmStore.schedule(ctx);
         }

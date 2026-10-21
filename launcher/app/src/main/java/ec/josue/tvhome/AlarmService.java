@@ -35,6 +35,8 @@ public class AlarmService extends Service {
     private AudioManager am;
     private AudioFocusRequest focus;
     private long startedAt;
+    private int round = 1;
+    private int prevVol = -1;
 
     @Override public IBinder onBind(Intent i) { return null; }
 
@@ -43,6 +45,7 @@ public class AlarmService extends Service {
         if (ACT_STOP.equals(a)) { finishRing(false); return START_NOT_STICKY; }
         if (ACT_SNOOZE.equals(a)) { finishRing(true); return START_NOT_STICKY; }
         if (ringing) return START_NOT_STICKY;
+        round = in == null ? 1 : in.getIntExtra("round", 1);
         ringing = true;
         startedAt = SystemClock.elapsedRealtime();
         startForegroundNotice();
@@ -88,8 +91,11 @@ public class AlarmService extends Service {
         AudioAttributes attr = new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build();
         try {
+            // volumen del sistema fijo en 40 % mientras suena; al terminar vuelve al valor anterior
             int max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM);
-            if (am.getStreamVolume(AudioManager.STREAM_ALARM) < max * 6 / 10) am.setStreamVolume(AudioManager.STREAM_ALARM, max * 6 / 10, 0);
+            prevVol = am.getStreamVolume(AudioManager.STREAM_ALARM);
+            getSharedPreferences("tvhome", MODE_PRIVATE).edit().putInt("alarm_prev_vol", prevVol).apply();
+            am.setStreamVolume(AudioManager.STREAM_ALARM, Math.max(1, Math.round(max * .40f)), 0);
             focus = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attr).build();
             am.requestAudioFocus(focus);
         } catch (Exception ignored) { }
@@ -123,14 +129,20 @@ public class AlarmService extends Service {
         @Override public void run() {
             if (!ringing) return;
             long t = SystemClock.elapsedRealtime() - startedAt;
-            if (t > MAX_MS) { finishRing(false); return; }
+            if (t > MAX_MS) {
+                // nadie la apagó: la primera vez se repite sola 10 min después; la segunda se rinde
+                finishRing(false, round == 1);
+                return;
+            }
             float v = Math.min(1f, .1f + t / 30000f);
             if (mp != null) { try { mp.setVolume(v, v); } catch (Exception ignored) { } }
             h.postDelayed(this, 500);
         }
     };
 
-    private void finishRing(boolean snooze) {
+    private void finishRing(boolean snooze) { finishRing(snooze, false); }
+
+    private void finishRing(boolean snooze, boolean auto) {
         ringing = false;
         h.removeCallbacksAndMessages(null);
         try { if (mp != null) { mp.stop(); mp.release(); } } catch (Exception ignored) { }
@@ -138,7 +150,16 @@ public class AlarmService extends Service {
         if (tone != null) { tone.release(); tone = null; }
         try { if (am != null && focus != null) am.abandonAudioFocusRequest(focus); } catch (Exception ignored) { }
         try { if (wl != null && wl.isHeld()) wl.release(); } catch (Exception ignored) { }
-        if (snooze) AlarmStore.once(this, System.currentTimeMillis() + AlarmStore.SNOOZE_MIN * 60000L);
+        try {
+            if (am != null) {
+                int v = prevVol >= 0 ? prevVol : getSharedPreferences("tvhome", MODE_PRIVATE).getInt("alarm_prev_vol", -1);
+                if (v >= 0) am.setStreamVolume(AudioManager.STREAM_ALARM, v, 0);
+            }
+        } catch (Exception ignored) { }
+        prevVol = -1;
+        getSharedPreferences("tvhome", MODE_PRIVATE).edit().remove("alarm_prev_vol").apply();
+        if (snooze) AlarmStore.once(this, System.currentTimeMillis() + AlarmStore.SNOOZE_MIN * 60000L, 1);
+        else if (auto) AlarmStore.once(this, System.currentTimeMillis() + AlarmStore.SNOOZE_MIN * 60000L, 2);
         stopForeground(true);
         stopSelf();
     }
