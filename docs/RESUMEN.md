@@ -115,3 +115,24 @@ Herramientas de `tools/` y ejemplos: [CleanYourTV](https://github.com/Gathin23/c
 - Con `launcherx` (inicio de Google TV) activo, gana siempre sobre el launcher propio (prioridad 2 contra 0). Probado: `set-home-activity`, rol HOME y prioridad 1000 en el manifiesto; ninguno cambia el resultado sin app privilegiada del sistema (root o ROM modificada).
 - Por eso el launcher es el inicio real solo con `launcherx` y `setupwraith` desactivados (usuario 0). Costo: Entradas/Fuentes y los botones de YouTube, Netflix, Prime Video y YouTube Music del control no responden; Inicio, micrófono, Ajustes (por `KeyService`), flechas y Atrás sí.
 - Para volver a Google TV: `pm enable --user 0 com.google.android.apps.tv.launcherx` y `com.google.android.tungsten.setupwraith`, o `scripts\undo-launcher.ps1 -StockLauncher com.google.android.apps.tv.launcherx`. La red `XTRIM-FAMILIA-CARRIONC` se borró al desactivar `setupwraith`.
+
+## 11. Estado al cierre de la sesión del 21 oct 2026 (versión 0.1.26)
+
+**Hecho en esta sesión (0.1.19 a 0.1.26):** consola multimedia en el inicio (se oculta a los 3 min en pausa), Inicio/Atrás siempre a la primera app, reposo con reloj ajustable (apagado/5/10/15/30/60 min, por defecto 10; en «Editar lista»), consola en reposo abajo a la izquierda solo con música sonando, y alarma diaria (fila inferior del inicio).
+
+**Alarma (0.1.24 a 0.1.26):** AlarmManager.setAlarmClock + servicio en primer plano + AlarmActivity sobre otras apps. Volumen del sistema fijo en 40 % mientras suena (sube de 4 a 40 en 30 s, arranque en silencio) y se restaura al terminar. Botones en pantalla «apagar» / «posponer 10 min» (flechas + OK; sin botón elegido OK no hace nada). Sin respuesta: suena 10 min, se repite sola una vez 10 min después y se rinde. Con alarma activa el launcher mantiene la pantalla encendida (FLAG_KEEP_SCREEN_ON) y muestra «alarma HH:MM» en el reposo.
+
+**Hallazgo de la prueba (21 oct):** con el TV suspendido con el botón de encendido (STR de Realtek, `persist.vendor.rtk.forcestr=1`) la alarma NO despierta el equipo: sonó al despertarlo a mano. Por eso la alarma exige dejar el TV en el reposo con reloj, no apagarlo con el control.
+
+**Ajustes de sistema cambiados por ADB (reversibles):**
+- Protector de pantalla del sistema desactivado (`screensaver_enabled 0`; originales en `scripts\screensaver-original.txt` si se ejecutó ese prompt).
+- Permisos de la alarma: `appops set ec.josue.tvhome SYSTEM_ALERT_WINDOW allow` y lista blanca de batería (`cmd deviceidle whitelist +ec.josue.tvhome`).
+- Solo para la noche del 21 oct: `screen_off_timeout` 43200000 (antes 600000) y `sleep_timeout` 0 (antes 3600000). **Restaurar** con `settings put system screen_off_timeout 600000` y `settings put secure sleep_timeout 3600000` (o automatizar la ventana 22:00 a 10:00 en el launcher).
+
+**Pendientes inmediatos:**
+1. Confirmar de noche si la alarma sonó a la hora, si la pantalla se mantuvo encendida toda la noche y si el arranque del volumen ya no da golpe.
+2. Restaurar los tiempos del sistema o automatizar la ventana 22:00 a 10:00 (opción A: solo FLAG_KEEP_SCREEN_ON acotado al horario; opción B: el launcher cambia los tiempos con WRITE_SETTINGS/WRITE_SECURE_SETTINGS y los restaura).
+3. Alarma completa: varias alarmas, días de la semana, línea «alarma HH:MM» también en el inicio normal (no solo en reposo), restauración del volumen ya implementada.
+4. Posible apagado automático propio de Realtek/KTC en el menú del TV (no visible por ADB): revisarlo a mano.
+5. Cerrar con `scripts\finish.ps1` cuando se dé por terminado (el puerto 5555 sigue abierto).
+6. Medición de rendimiento (21 oct): RAM justa (~420 a 550 MB disponibles, ~360 MB en swap), launcher 88 MB PSS, 8,3 % de cuadros lentos (meta <5 %). Candidato a optimizar el dibujo; sin cambios todavía.
