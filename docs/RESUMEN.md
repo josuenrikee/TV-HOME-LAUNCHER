@@ -68,7 +68,7 @@ Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, con foco ini
 | 0.1.14 | El servicio también atiende Entradas/Fuentes (KEYCODE_TV_INPUT) y abre la pantalla de Entradas del launcher desde cualquier app. |
 | 0.1.15 | Botones de YouTube, Netflix, Prime Video y YouTube Music del control: el servicio escucha el aviso `GLOBAL_BUTTON` de Realtek y las teclas 3003, 3001, 195 y 3025, y abre cada app. Deja registro en logcat (etiqueta TvHomeKeys). Resultado: las teclas no llegan a Android; se quedan en el servicio de Realtek. |
 | 0.1.16 | Receptor declarado en el manifiesto para `ACTION_LAUNCH_APP` (experimento). Resultado: no llegó nada; el `sendBroadcast` que se veía era `ACTION_HIDE_STORE_WINDOW` de Realtek hacia el modo tienda. |
-| 0.1.17 | Prioridad 1000 en el filtro HOME del launcher (experimento para convivir con `launcherx` activo; el rol HOME ya lo tenía y no bastó). |
+| 0.1.17 | Prioridad 1000 en el filtro HOME del launcher (experimento para convivir con `launcherx` activo; el rol HOME ya lo tenía y no bastó). Resultado: Android deja la prioridad en 0 para apps que no son del sistema. |
 
 ## 6. Problemas encontrados y cómo se resolvieron
 
@@ -101,3 +101,9 @@ Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, con foco ini
 ## 9. Créditos
 
 Herramientas de `tools/` y ejemplos: [CleanYourTV](https://github.com/Gathin23/cleanyourtv) (MIT). Clima: [Open-Meteo](https://open-meteo.com) (CC BY 4.0). Tipografía Bebas Neue: SIL OFL 1.1.
+
+## 10. Conclusión sobre el inicio real y los botones del control (21 oct 2026)
+
+- Con `launcherx` (inicio de Google TV) activo, gana siempre sobre el launcher propio (prioridad 2 contra 0). Probado: `set-home-activity`, rol HOME y prioridad 1000 en el manifiesto; ninguno cambia el resultado sin app privilegiada del sistema (root o ROM modificada).
+- Por eso el launcher es el inicio real solo con `launcherx` y `setupwraith` desactivados (usuario 0). Costo: Entradas/Fuentes y los botones de YouTube, Netflix, Prime Video y YouTube Music del control no responden; Inicio, micrófono, Ajustes (por `KeyService`), flechas y Atrás sí.
+- Para volver a Google TV: `pm enable --user 0 com.google.android.apps.tv.launcherx` y `com.google.android.tungsten.setupwraith`, o `scripts\undo-launcher.ps1 -StockLauncher com.google.android.apps.tv.launcherx`. La red `XTRIM-FAMILIA-CARRIONC` se borró al desactivar `setupwraith`.
