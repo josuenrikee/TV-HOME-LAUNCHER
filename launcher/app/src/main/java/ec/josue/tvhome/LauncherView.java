@@ -230,6 +230,18 @@ final class LauncherView extends View {
     // ------------------------------------------------------------------ entrada de teclas
 
     boolean onKey(int keyCode, boolean longPress) {
+        // Botones dedicados del control: como el inicio de Google TV esta desactivado, los atiende el launcher
+        boolean wantSettings = keyCode == KeyEvent.KEYCODE_SETTINGS;
+        boolean wantInputs = keyCode == KeyEvent.KEYCODE_TV_INPUT || keyCode == KeyEvent.KEYCODE_TV
+            || (keyCode >= KeyEvent.KEYCODE_TV_INPUT_HDMI_1 && keyCode <= KeyEvent.KEYCODE_TV_INPUT_COMPOSITE_2)
+            || keyCode == KeyEvent.KEYCODE_TV_INPUT_VGA_1;
+        if (wantSettings || wantInputs) {
+            if (overlay != 0 || SystemClock.uptimeMillis() < lockUntil) return true;
+            if (wantSettings) openSystemSettings();
+            else if (screen != HDMI) enterTool(1);
+            invalidate();
+            return true;
+        }
         int k;
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_UP: k = 1; break;

@@ -63,6 +63,7 @@ Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, con foco ini
 | 0.1.9 | Rueda sin aplastado vertical: solo profundidad, tamaño uniforme. |
 | 0.1.10 | Reloj grande apilado con Bebas Neue en el inicio; fecha centrada. |
 | 0.1.11 | Wi-Fi junto al clima, fecha a la altura del saludo, reloj 20 px más abajo y degradado más suave (55 % a 16 %). |
+| 0.1.12 | Los botones dedicados del control (Ajustes, Entradas/Fuentes, TV, HDMI) los atiende el launcher cuando está en pantalla. |
 
 ## 6. Problemas encontrados y cómo se resolvieron
 
@@ -76,8 +77,8 @@ Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, con foco ini
 
 ## 7. Pendientes
 
-- Decidir y ejecutar el paso a **inicio real** (hoy Google TV conserva el HOME y el launcher se abre desde "Todas las apps"). Reversible con `scripts\undo-launcher.ps1`.
-  Antes de hacerlo, probar el botón de inicio, el micrófono y el asistente del control remoto.
+- ~~Inicio real~~ **hecho (20 oct 2026)**: se desactivaron `launcherx` y `setupwraith` (usuario 0) tras olvidar y reunir el Wi-Fi, para que la red no pertenezca a `setupwraith`. Inicio y micrófono funcionan. Reversible con `scripts\undo-launcher.ps1 -StockLauncher com.google.android.apps.tv.launcherx` y `pm enable` de ambos paquetes.
+- Los botones físicos Entradas/Fuentes y Ajustes del control dejaron de funcionar con el inicio de Google TV desactivado; se atienden desde el launcher (0.1.12) cuando está en pantalla. Dentro de otras apps queda por comprobar.
 - Revisar la **posición del icono Wi-Fi** junto al clima (no convence del todo).
 - Validar en el TV real las tarjetas de "Todas las apps" y la sensación de la rueda.
 - Más limpieza opcional: Prime Video, YouTube Music, Kick, Pluto y Apple TV sin confirmar.
