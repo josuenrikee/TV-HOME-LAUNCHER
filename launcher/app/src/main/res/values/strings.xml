@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Inicio</string>
+    <string name="key_service_desc">Atiende el boton de ajustes del control remoto. Solo filtra teclas.</string>
 </resources>
