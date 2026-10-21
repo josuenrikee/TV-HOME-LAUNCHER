@@ -609,6 +609,8 @@ final class LauncherView extends View {
     private List<AlarmStore.Alarm> alarms = new ArrayList<>();
     private int alarmSel = 0, alarmEditIdx = -1, alarmField = 0, alarmDay = 0;
     private long alarmDelArmed = 0L;
+    private boolean alarmTimeEdit = false;
+    private int alarmCol = 0;
     private boolean alarmFeature = true;
 
     private void persistAlarms() { AlarmStore.save(host, alarms); applyAlarmState(); }
@@ -617,6 +619,7 @@ final class LauncherView extends View {
         alarms = AlarmStore.list(host);
         alarmSel = 0;
         alarmEditIdx = -1;
+        alarmTimeEdit = false;
         alarmField = 0;
         alarmDay = 0;
         screen = ALARM;
@@ -652,12 +655,13 @@ final class LauncherView extends View {
         else if (alarmSel < n) {
             AlarmStore.Alarm a = alarms.get(alarmSel);
             if (k == LEFT || k == RIGHT) { a.on = !a.on; persistAlarms(); }
-            else if (k == OK || k == LONG) { alarmEditIdx = alarmSel; alarmField = 0; alarmDay = 0; alarmDelArmed = 0L; }
+            else if (k == OK || k == LONG) { alarmEditIdx = alarmSel; alarmField = 0; alarmDay = 0; alarmDelArmed = 0L; alarmTimeEdit = false; }
         } else if (canAdd && alarmSel == n) {
             if (k == OK || k == LONG) {
                 alarms.add(new AlarmStore.Alarm());
                 persistAlarms();
                 alarmEditIdx = n;
+                alarmTimeEdit = false;
                 alarmField = 0;
                 alarmDay = 0;
                 alarmDelArmed = 0L;
@@ -672,22 +676,31 @@ final class LauncherView extends View {
     private void keyAlarmEdit(int k) {
         if (alarmEditIdx < 0 || alarmEditIdx >= alarms.size()) { alarmEditIdx = -1; return; }
         AlarmStore.Alarm a = alarms.get(alarmEditIdx);
+        if (alarmTimeEdit) {
+            // modo hora: izquierda y derecha alternan horas y minutos; arriba y abajo cambian el número
+            if (k == LEFT) alarmCol = 0;
+            else if (k == RIGHT) alarmCol = 1;
+            else if (k == UP || k == DOWN) {
+                int d = k == UP ? 1 : -1;
+                if (alarmCol == 0) a.h = (a.h + d + 24) % 24; else a.m = (a.m + d + 60) % 60;
+                a.on = true;
+                persistAlarms();
+            } else alarmTimeEdit = false;
+            return;
+        }
         if (k == BACK) { alarmEditIdx = -1; alarmDelArmed = 0L; return; }
         if (k == UP) { if (alarmField > 0) alarmField--; return; }
-        if (k == DOWN) { if (alarmField < 4) alarmField++; return; }
+        if (k == DOWN) { if (alarmField < 3) alarmField++; return; }
         int d = k == RIGHT ? 1 : (k == LEFT ? -1 : 0);
         switch (alarmField) {
             case 0:
-                if (d != 0) { a.h = (a.h + d + 24) % 24; a.on = true; persistAlarms(); }
+                if (k == OK || k == LONG) { alarmTimeEdit = true; alarmCol = 0; }
                 break;
             case 1:
-                if (d != 0) { a.m = (a.m + d + 60) % 60; a.on = true; persistAlarms(); }
-                break;
-            case 2:
                 if (d != 0) alarmDay = Math.max(0, Math.min(6, alarmDay + d));
                 else if (k == OK || k == LONG) { a.days ^= (1 << alarmDay); persistAlarms(); }
                 break;
-            case 3:
+            case 2:
                 if (d != 0) { a.label = (a.label + d + AlarmStore.LABELS.length) % AlarmStore.LABELS.length; persistAlarms(); }
                 break;
             default:
@@ -1126,8 +1139,11 @@ final class LauncherView extends View {
         final float r = rest.v;
         final float cx = 1572f + (960f - 1572f) * r + driftX * r;
         final float capH = 390f + 23f * r, gap = 24f + r, top = 170f - 9f * r + driftY * r;
-        text(c, dateStr, cx, 128f - 11f * r + driftY * r, medium, 34f, SOFT, a, 0f, Paint.Align.CENTER);
-        if (alarmArmed && alarmTimeStr.length() > 0 && r > .01f) text(c, "alarma " + alarmTimeStr, cx, 128f - 11f * r + driftY * r + 32f, medium, 26f, MUTED, a * r, 0f, Paint.Align.CENTER);
+        boolean showAlarm = alarmArmed && alarmTimeStr.length() > 0;
+        float dateY = 128f - 11f * r + driftY * r + (showAlarm ? 9f * r : 0f);
+        text(c, dateStr, cx, dateY, medium, 34f, SOFT, a, 0f, Paint.Align.CENTER);
+        // en reposo, la alarma va arriba de la fecha
+        if (showAlarm && r > .01f) text(c, "alarma " + alarmTimeStr, cx, dateY - 40f, medium, 26f, MUTED, a * r, 0f, Paint.Align.CENTER);
         if (clockShader == null || clockKey != accent || clockR != r || clockTop != top) {
             clockShader = new LinearGradient(0f, top, 0f, top + 2f * capH + gap,
                 withAlpha(accent, .55f), withAlpha(accent, .16f), Shader.TileMode.CLAMP);
@@ -1527,20 +1543,36 @@ final class LauncherView extends View {
         // hora y minutos
         float w2 = tw("00", bold, 170f, -.03f), cw = tw(":", bold, 170f, -.03f);
         float x0 = 112f, base = 470f;
-        boolean fh = alarmField == 0, fm = alarmField == 1;
-        text(c, two(a.h), x0, base, bold, 170f, TXT, fh || fm ? 1f : .42f, -.03f, Paint.Align.LEFT);
-        text(c, ":", x0 + w2 + 6f, base, bold, 170f, TXT, .5f, -.03f, Paint.Align.LEFT);
-        text(c, two(a.m), x0 + w2 + cw + 12f, base, bold, 170f, TXT, fh || fm ? 1f : .42f, -.03f, Paint.Align.LEFT);
-        if (fh || fm) {
-            float ux = fh ? x0 : x0 + w2 + cw + 12f;
+        boolean ft = alarmField == 0;
+        float ta = ft ? 1f : .42f;
+        if (ft && !alarmTimeEdit) bar(c, 78f, base - 110f, amb, 8f, 110f);
+        text(c, two(a.h), x0, base, bold, 170f, TXT, alarmTimeEdit && alarmCol == 1 ? .45f : ta, -.03f, Paint.Align.LEFT);
+        text(c, ":", x0 + w2 + 6f, base, bold, 170f, TXT, .5f * ta, -.03f, Paint.Align.LEFT);
+        text(c, two(a.m), x0 + w2 + cw + 12f, base, bold, 170f, TXT, alarmTimeEdit && alarmCol == 0 ? .45f : ta, -.03f, Paint.Align.LEFT);
+        if (ft && alarmTimeEdit) {
+            float ux = alarmCol == 0 ? x0 : x0 + w2 + cw + 12f;
             fill.setShader(null);
             fill.setColor(amb);
             fill.setAlpha(255);
             rect.set(ux, base + 22f, ux + w2, base + 30f);
             c.drawRoundRect(rect, 4f, 4f, fill);
+            // flechas: arriba sube, abajo baja
+            float mx = ux + w2 / 2f;
+            ctlPath.reset();
+            ctlPath.moveTo(mx - 20f, base - 128f);
+            ctlPath.lineTo(mx + 20f, base - 128f);
+            ctlPath.lineTo(mx, base - 160f);
+            ctlPath.close();
+            c.drawPath(ctlPath, fill);
+            ctlPath.reset();
+            ctlPath.moveTo(mx - 20f, base + 50f);
+            ctlPath.lineTo(mx + 20f, base + 50f);
+            ctlPath.lineTo(mx, base + 82f);
+            ctlPath.close();
+            c.drawPath(ctlPath, fill);
         }
         // días
-        boolean fd = alarmField == 2;
+        boolean fd = alarmField == 1;
         float dy = 590f;
         if (fd) bar(c, 78f, dy + 6f, amb, 8f, 64f);
         for (int i = 0; i < 7; i++) {
@@ -1565,19 +1597,22 @@ final class LauncherView extends View {
         }
         text(c, daysText(a.days), 112f + 7f * 104f + 16f, dy + 50f, medium, 30f, SOFT, 1f, 0f, Paint.Align.LEFT);
         // etiqueta
-        boolean fl = alarmField == 3;
+        boolean fl = alarmField == 2;
         float ly = 730f;
         if (fl) bar(c, 78f, ly + 10f, amb, 8f, 50f);
         String lab = a.label > 0 ? AlarmStore.LABELS[a.label] : "sin etiqueta";
         text(c, "Etiqueta", 112f, ly + 48f, bold, 44f, TXT, fl ? 1f : .42f, -.035f, Paint.Align.LEFT);
         text(c, (fl ? "‹  " : "") + lab + (fl ? "  ›" : ""), 560f, ly + 46f, medium, 36f, fl ? TXT : SOFT, 1f, 0f, Paint.Align.LEFT);
         // eliminar
-        boolean fe = alarmField == 4;
+        boolean fe = alarmField == 3;
         float ey = 850f;
         if (fe) bar(c, 78f, ey + 10f, amb, 8f, 50f);
         boolean armed = SystemClock.uptimeMillis() < alarmDelArmed;
         text(c, armed ? "Pulsa OK otra vez para eliminar" : "Eliminar alarma", 112f, ey + 48f, bold, 44f, TXT, fe ? 1f : .42f, -.035f, Paint.Align.LEFT);
-        text(c, "Arriba y abajo cambian de campo · izquierda y derecha cambian el valor · atrás guarda", 112f, 1038f, medium, 26f, SOFT, 1f, 0f, Paint.Align.LEFT);
+        String hint = alarmTimeEdit ? "Arriba y abajo cambian el número · izquierda y derecha, horas o minutos · OK termina"
+            : (ft ? "OK para cambiar la hora · arriba y abajo cambian de campo · atrás guarda"
+                  : "Arriba y abajo cambian de campo · izquierda y derecha cambian el valor · atrás guarda");
+        text(c, hint, 112f, 1038f, medium, 26f, SOFT, 1f, 0f, Paint.Align.LEFT);
     }
 
     private void header(Canvas c, String kicker, String title) {
