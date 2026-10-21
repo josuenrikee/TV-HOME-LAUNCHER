@@ -37,6 +37,8 @@ public class AlarmService extends Service {
     private long startedAt;
     private int round = 1;
     private int prevVol = -1;
+    private long rampT0 = 0L;
+    private boolean raised = false;
 
     @Override public IBinder onBind(Intent i) { return null; }
 
@@ -47,6 +49,7 @@ public class AlarmService extends Service {
         if (ringing) return START_NOT_STICKY;
         round = in == null ? 1 : in.getIntExtra("round", 1);
         ringing = true;
+        raised = false;
         startedAt = SystemClock.elapsedRealtime();
         startForegroundNotice();
         wake();
@@ -54,7 +57,7 @@ public class AlarmService extends Service {
         try {
             startActivity(new Intent(this, AlarmActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_USER_ACTION));
         } catch (Exception ignored) { }
-        h.postDelayed(ramp, 500);
+        h.postDelayed(ramp, 100);
         return START_NOT_STICKY;
     }
 
@@ -91,11 +94,10 @@ public class AlarmService extends Service {
         AudioAttributes attr = new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build();
         try {
-            // volumen del sistema fijo en 40 % mientras suena; al terminar vuelve al valor anterior
-            int max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM);
             prevVol = am.getStreamVolume(AudioManager.STREAM_ALARM);
             getSharedPreferences("tvhome", MODE_PRIVATE).edit().putInt("alarm_prev_vol", prevVol).apply();
-            am.setStreamVolume(AudioManager.STREAM_ALARM, Math.max(1, Math.round(max * .40f)), 0);
+            // el audio arranca con el volumen del sistema al mínimo y en silencio; sube al 40 % cuando ya está fluyendo
+            am.setStreamVolume(AudioManager.STREAM_ALARM, 1, 0);
             focus = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT).setAudioAttributes(attr).build();
             am.requestAudioFocus(focus);
         } catch (Exception ignored) { }
@@ -107,14 +109,29 @@ public class AlarmService extends Service {
             mp.setAudioAttributes(attr);
             mp.setDataSource(this, u);
             mp.setLooping(true);
-            mp.setVolume(.1f, .1f);
+            mp.setVolume(0f, 0f);
             mp.prepare();
+            mp.setVolume(0f, 0f);
             mp.start();
+            mp.setVolume(0f, 0f);
         } catch (Exception e) {
             mp = null;
             try { tone = new ToneGenerator(AudioManager.STREAM_ALARM, 100); } catch (Exception ignored) { }
-            beep.run();
         }
+        // 1,2 s después (con el audio ya estable) el sistema sube al 40 % y empieza la subida suave
+        h.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (!ringing) return;
+                try {
+                    int max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM);
+                    am.setStreamVolume(AudioManager.STREAM_ALARM, Math.max(1, Math.round(max * .40f)), 0);
+                } catch (Exception ignored) { }
+                raised = true;
+                rampT0 = SystemClock.elapsedRealtime();
+                if (mp != null) { try { mp.setVolume(.1f, .1f); } catch (Exception ignored) { } }
+                else beep.run();
+            }
+        }, 1200);
     }
 
     private final Runnable beep = new Runnable() {
@@ -134,9 +151,15 @@ public class AlarmService extends Service {
                 finishRing(false, round == 1);
                 return;
             }
-            float v = Math.min(1f, .1f + t / 30000f);
+            if (!raised) {
+                if (mp != null) { try { mp.setVolume(0f, 0f); } catch (Exception ignored) { } }
+                h.postDelayed(this, 100);
+                return;
+            }
+            // de 4 a 40 en la escala del TV (10 % a 100 % del volumen interno), en 30 s
+            float v = Math.min(1f, .1f + .9f * (SystemClock.elapsedRealtime() - rampT0) / 30000f);
             if (mp != null) { try { mp.setVolume(v, v); } catch (Exception ignored) { } }
-            h.postDelayed(this, 500);
+            h.postDelayed(this, 200);
         }
     };
 

@@ -104,6 +104,8 @@ final class LauncherView extends View {
     private boolean restOn = false, restMusicTarget = false;
     private long lastInput = SystemClock.uptimeMillis();
     private float driftX = 0f, driftY = 0f;
+    private boolean alarmArmed = false;
+    private String alarmTimeStr = "";
     private final MediaWatcher media;
     private final Path ctlPath = new Path();
     private final Matrix artMatrix = new Matrix();
@@ -168,6 +170,7 @@ final class LauncherView extends View {
     // ------------------------------------------------------------------ ciclo de vida
 
     void onResumed() {
+        applyAlarmState();
         lastInput = SystemClock.uptimeMillis();
         if (restOn && SystemClock.uptimeMillis() - lastPausedAt > 1500) { restOn = false; rest.set(0f); }
         store.refresh();
@@ -278,6 +281,17 @@ final class LauncherView extends View {
         }
     }
 
+    /** Con una alarma activa la pantalla no se apaga sola mientras el launcher está al frente. */
+    private void applyAlarmState() {
+        alarmArmed = AlarmStore.enabled(host);
+        int h = AlarmStore.hour(host), m = AlarmStore.minute(host);
+        alarmTimeStr = (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+        try {
+            if (alarmArmed) host.getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            else host.getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } catch (Exception ignored) { }
+    }
+
     /** Pasa al reposo: la lista y los datos salen y el reloj se desliza al centro. */
     private void enterRest() {
         if (restOn) return;
@@ -341,6 +355,7 @@ final class LauncherView extends View {
     private void tick() {
         Date now = new Date();
         String oldClock = clockStr, oldDate = dateStr;
+        applyAlarmState();
         clockStr = fmtClock.format(now);
         syncConsole();
         dateStr = fmtDate.format(now);
@@ -559,7 +574,7 @@ final class LauncherView extends View {
     private boolean alarmOn = false, alarmEditing = false;
     private int alarmH = 6, alarmM = 30, alarmRow = 0, alarmCol = 0;
 
-    private void saveAlarm() { AlarmStore.save(host, alarmOn, alarmH, alarmM); }
+    private void saveAlarm() { AlarmStore.save(host, alarmOn, alarmH, alarmM); applyAlarmState(); }
 
     private String alarmWhen() {
         long t = AlarmStore.nextTrigger(host);
@@ -1002,6 +1017,7 @@ final class LauncherView extends View {
         final float cx = 1572f + (960f - 1572f) * r + driftX * r;
         final float capH = 390f + 23f * r, gap = 24f + r, top = 170f - 9f * r + driftY * r;
         text(c, dateStr, cx, 128f - 11f * r + driftY * r, medium, 34f, SOFT, a, 0f, Paint.Align.CENTER);
+        if (alarmArmed && r > .01f) text(c, "alarma " + alarmTimeStr, cx, 128f - 11f * r + driftY * r + 32f, medium, 26f, MUTED, a * r, 0f, Paint.Align.CENTER);
         if (clockShader == null || clockKey != accent || clockR != r || clockTop != top) {
             clockShader = new LinearGradient(0f, top, 0f, top + 2f * capH + gap,
                 withAlpha(accent, .55f), withAlpha(accent, .16f), Shader.TileMode.CLAMP);
@@ -1016,7 +1032,8 @@ final class LauncherView extends View {
         p.setTextAlign(Paint.Align.CENTER);
         p.setShader(clockShader);
         p.setColor(0xFFFFFFFF);
-        p.setAlpha(Math.max(0, Math.min(255, (int) (a * 255))));
+        float ca = a * (1f - (alarmArmed ? .35f * r : 0f));
+        p.setAlpha(Math.max(0, Math.min(255, (int) (ca * 255))));
         c.drawText(hh, cx, top + capH, p);
         c.drawText(mm, cx, top + 2f * capH + gap, p);
         p.setShader(null);
@@ -1374,7 +1391,10 @@ final class LauncherView extends View {
         boolean on2 = alarmRow == 2;
         if (on2) bar(c, 78f, 790f + 10f, 0xFFE0A21B, 8f, 44f);
         text(c, "Probar en 1 minuto", 112f, 836f, bold, 44f, TXT, on2 ? 1f : .42f, -.035f, Paint.Align.LEFT);
-        if (alarmOn) text(c, alarmWhen(), 112f, 920f, medium, 30f, MUTED, 1f, 0f, Paint.Align.LEFT);
+        if (alarmOn) {
+            text(c, alarmWhen(), 112f, 920f, medium, 30f, MUTED, 1f, 0f, Paint.Align.LEFT);
+            text(c, "No apagues el TV con el control: déjalo en reposo para que la alarma suene.", 112f, 972f, medium, 28f, SOFT, 1f, 0f, Paint.Align.LEFT);
+        }
     }
 
     private void header(Canvas c, String kicker, String title) {
