@@ -414,14 +414,14 @@ final class LauncherView extends View {
         float cur = editScroll.v;
         float target = cur;
         if (t - cur < 250f) target = t - 250f;
-        else if (t + 72f - cur > 960f) target = t + 72f - 960f;
+        else if (t + 64f - cur > 960f) target = t + 64f - 960f;
         if (target < 0f) target = 0f;
         if (target != cur) editScroll.to(target, 220, smooth);
     }
 
     private float editRowTop(int idx) {
         int n = store.pinned.size();
-        return 250f + idx * 72f + (idx >= n ? 14f : 0f) + (idx >= n + 2 ? 14f : 0f);
+        return 250f + idx * 64f + (idx >= n ? 14f : 0f) + (idx >= n + 2 ? 14f : 0f);
     }
 
     // ------------------------------------------------------------------ acciones del sistema
@@ -451,13 +451,13 @@ final class LauncherView extends View {
         launched = false;
         overlay = 1;
         openMs = 0f;
-        openAnim = ValueAnimator.ofFloat(0f, 1700f);
-        openAnim.setDuration(1700);
+        openAnim = ValueAnimator.ofFloat(0f, 760f);
+        openAnim.setDuration(760);
         openAnim.setInterpolator(new LinearInterpolator());
         openAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             @Override public void onAnimationUpdate(ValueAnimator a) {
                 openMs = (Float) a.getAnimatedValue();
-                if (!launched && openMs >= 900f && pending != null) {
+                if (!launched && openMs >= 300f && pending != null) {
                     launched = true;
                     try { host.startActivity(pending); }
                     catch (Exception ex) { abortOpen(); return; }
@@ -500,7 +500,7 @@ final class LauncherView extends View {
                 CharSequence nm = info.loadCustomLabel(host);
                 if (nm == null || nm.length() == 0) nm = info.loadLabel(host);
                 inputs.add(info);
-                inputNames.add(tuner ? "TV (antena)" : (nm == null ? info.getId() : nm.toString()));
+                inputNames.add(tuner ? "TV (antena)" : (nm == null ? info.getId() : nm.toString().replaceAll("(?i)hdmi\\s*(\\d)", "HDMI $1")));
             }
             // Orden fijo: HDMI 1, HDMI 2, AV y TV (antena).
             for (int i = 1; i < inputs.size(); i++) {
@@ -582,6 +582,10 @@ final class LauncherView extends View {
         return MUTED;
     }
 
+    private Shader glowShader = null, bandShader = null;
+    private int glowKey = 0, bandKey = 0;
+    private final java.util.HashMap<Integer, Shader> cellShaders = new java.util.HashMap<>();
+
     private void drawHome(Canvas c) {
         int n = store.pinned.size();
         int accent = currentAccent();
@@ -591,8 +595,8 @@ final class LauncherView extends View {
         float chromeA = 1f;
         float barA = 1f - toolsDim.v;
         if (overlay == 1) {
-            restA = 1f - clamp01(openMs / 260f);
-            selA = 1f - clamp01((openMs - 1160f) / 450f);
+            restA = 1f - clamp01(openMs / 180f);
+            selA = 1f - clamp01((openMs - 520f) / 240f);
             chromeA = restA;
             barA = 0f;
         } else if (overlay == 2) {
@@ -601,14 +605,19 @@ final class LauncherView extends View {
             restA = selA = chromeA = 1f - ret.v;
             barA = (1f - ret.v) * (1f - toolsDim.v);
         }
-        float glowA = (overlay == 1) ? (1f - clamp01(openMs / 380f)) * (1f - toolsDim.v) : barA;
+        float glowA = (overlay == 1) ? (1f - clamp01(openMs / 260f)) * (1f - toolsDim.v) : barA;
 
         // brillo de fondo
         if (glowA > 0.001f) {
             c.save();
             c.translate(460f, 540f);
             c.scale(1f, .5f);
-            fill.setShader(new RadialGradient(0f, 0f, 600f, withAlpha(accent, .30f * glowA), withAlpha(accent, 0f), Shader.TileMode.CLAMP));
+            if (glowShader == null || glowKey != accent) {
+                glowShader = new RadialGradient(0f, 0f, 600f, withAlpha(accent, .30f), withAlpha(accent, 0f), Shader.TileMode.CLAMP);
+                glowKey = accent;
+            }
+            fill.setShader(glowShader);
+            fill.setAlpha((int) (255 * glowA));
             c.drawCircle(0f, 0f, 600f, fill);
             fill.setShader(null);
             c.restore();
@@ -668,7 +677,7 @@ final class LauncherView extends View {
             fill.setColor(accent | 0xFF000000);
             fill.setAlpha((int) (255 * a));
             c.drawCircle(119f, 117f, 7f, fill);
-            text(c, greetStr.toUpperCase(new Locale("es")), 144f, 126f, mono, 28f, MUTED, a, .14f, Paint.Align.LEFT);
+            text(c, greetStr, 144f, 128f, medium, 34f, MUTED, a, 0f, Paint.Align.LEFT);
         }
         if (store.weather) {
             int t = weather.cached();
@@ -677,7 +686,7 @@ final class LauncherView extends View {
             float w = tw(temp, medium, 44f, -.01f);
             text(c, " · Guayaquil", 112f + w, 190f, medium, 44f, MUTED, a, -.01f, Paint.Align.LEFT);
         }
-        text(c, clockStr, 1808f, 168f, mono, 104f, TXT, a, -.04f, Paint.Align.RIGHT);
+        text(c, clockStr, 1808f, 168f, medium, 104f, TXT, a, -.03f, Paint.Align.RIGHT);
         text(c, dateStr, 1808f, 232f, medium, 38f, SOFT, a, 0f, Paint.Align.RIGHT);
 
         // fila inferior: oculta mientras se exploran las apps, aparece al bajar del final de la lista
@@ -686,16 +695,16 @@ final class LauncherView extends View {
             float x = 112f;
             for (int j = 0; j < TOOLS.length; j++) {
                 boolean f = !inApps && j == tool;
-                float w = tw(TOOLS[j], medium, 28f, 0f);
-                float ta = ra * (f ? 1f : .7f);
-                text(c, TOOLS[j], x, 992f, medium, 28f, f ? TXT : SOFT, ta, 0f, Paint.Align.LEFT);
+                float w = tw(TOOLS[j], medium, 32f, 0f);
+                float ta = ra * (f ? 1f : .8f);
+                text(c, TOOLS[j], x, 992f, medium, 32f, f ? TXT : SOFT, ta, 0f, Paint.Align.LEFT);
                 if (f) {
                     fill.setShader(null);
                     fill.setColor(TOOL_ACCENT[j]);
                     fill.setAlpha((int) (255 * ra));
-                    c.drawRect(x, 1004f, x + w, 1006f, fill);
+                    c.drawRect(x, 1004f, x + w, 1008f, fill);
                 }
-                x += w + 44f;
+                x += w + 48f;
             }
         }
         // red: solo el icono, discreto
@@ -709,6 +718,8 @@ final class LauncherView extends View {
         p.setStrokeCap(Paint.Cap.ROUND);
         p.setColor(MUTED);
         p.setAlpha((int) (255 * a));
+        c.save();
+        c.scale(1.35f, 1.35f, x + 15f, y + 24f);
         float cx = x + 15f, cy = y + 24f;
         float[] r = {22f, 14f, 6f};
         for (float rr : r) {
@@ -723,6 +734,7 @@ final class LauncherView extends View {
             c.drawLine(cx + 24f, cy - 8f, cx + 12f, cy + 4f, p);
             p.setStyle(Paint.Style.FILL);
         }
+        c.restore();
     }
 
     private boolean netOk = true;
@@ -742,13 +754,13 @@ final class LauncherView extends View {
         float bandP, floodP, darkP, alpha = 1f;
         if (overlay == 1) {
             if (homeOrigin) {
-                bandP = smooth.getInterpolation(clamp01(openMs / 380f));
-                floodP = flood.getInterpolation(clamp01((openMs - 380f) / 520f));
+                bandP = smooth.getInterpolation(clamp01(openMs / 240f));
+                floodP = flood.getInterpolation(clamp01((openMs - 240f) / 280f));
             } else {
                 bandP = 1f; floodP = 1f;
-                alpha = clamp01(openMs / 400f);
+                alpha = clamp01(openMs / 260f);
             }
-            darkP = clamp01((openMs - 1160f) / 450f);
+            darkP = clamp01((openMs - 520f) / 240f);
         } else if (overlay == 2) {
             bandP = 1f; floodP = 1f; darkP = 1f;
         } else {
@@ -758,9 +770,13 @@ final class LauncherView extends View {
         float top = 465f + (0f - 465f) * floodP;
         float right = 112f + (W - 112f) * bandP;
         float bottom = 615f + (H - 615f) * floodP;
-        fill.setShader(new LinearGradient(0f, 0f, W, 0f,
-            new int[] {accent | 0xFF000000, hot(accent, .18f), accent | 0xFF000000},
-            new float[] {0f, .55f, 1f}, Shader.TileMode.CLAMP));
+        if (bandShader == null || bandKey != accent) {
+            bandShader = new LinearGradient(0f, 0f, W, 0f,
+                new int[] {accent | 0xFF000000, hot(accent, .18f), accent | 0xFF000000},
+                new float[] {0f, .55f, 1f}, Shader.TileMode.CLAMP);
+            bandKey = accent;
+        }
+        fill.setShader(bandShader);
         fill.setAlpha((int) (255 * alpha));
         c.drawRect(left, top, right, bottom, fill);
         fill.setShader(null);
@@ -802,9 +818,8 @@ final class LauncherView extends View {
     }
 
     private void header(Canvas c, String kicker, String title) {
-        text(c, kicker, 112f, 118f, mono, 24f, MUTED, 1f, .16f, Paint.Align.LEFT);
         text(c, title, 112f, 192f, bold, 96f, TXT, 1f, -.04f, Paint.Align.LEFT);
-        text(c, clockStr, 1808f, 142f, mono, 52f, SOFT, 1f, -.03f, Paint.Align.RIGHT);
+        text(c, clockStr, 1808f, 142f, medium, 52f, SOFT, 1f, -.02f, Paint.Align.RIGHT);
     }
 
     private void bar(Canvas c, float x, float y, int color, float w, float h) {
@@ -818,25 +833,59 @@ final class LauncherView extends View {
     private void drawGrid(Canvas c, List<AppEntry> list, int idx, int topRow, boolean marks) {
         c.save();
         c.clipRect(0f, 300f, W, 1010f);
+        final float cw = 320f, step = 344f;
         for (int i = 0; i < list.size(); i++) {
             int row = i / 5 - topRow, col = i % 5;
             if (row < 0 || row > 2) continue;
-            float x = 112f + col * 308f, y = 340f + row * 200f;
+            float x = 112f + col * step, y = 340f + row * 200f;
             boolean on = i == idx;
             AppEntry e = list.get(i);
             if (on) {
-                fill.setShader(new LinearGradient(0f, y + 170f, 0f, y, withAlpha(e.accent, .22f), withAlpha(e.accent, 0f), Shader.TileMode.CLAMP));
-                c.drawRect(x, y, x + 280f, y + 170f, fill);
+                Shader sh = cellShaders.get(e.accent);
+                if (sh == null) {
+                    sh = new LinearGradient(0f, 170f, 0f, 0f, withAlpha(e.accent, .22f), withAlpha(e.accent, 0f), Shader.TileMode.CLAMP);
+                    cellShaders.put(e.accent, sh);
+                }
+                c.save();
+                c.translate(x, y);
+                fill.setShader(sh);
+                fill.setAlpha(255);
+                c.drawRect(0f, 0f, cw, 170f, fill);
                 fill.setShader(null);
+                c.restore();
             }
             fill.setColor(on ? (e.accent | 0xFF000000) : 0xFFF6F4F0);
             fill.setAlpha(on ? 255 : 36);
-            c.drawRect(x, y + 164f, x + 280f, y + 170f, fill);
+            c.drawRect(x, y + 164f, x + cw, y + 170f, fill);
             float a = on ? 1f : .5f;
-            text(c, fit(e.label, bold, 46f, -.03f, 272f), x, y + 118f, bold, 46f, TXT, a, -.03f, Paint.Align.LEFT);
-            if (marks && store.isPinned(e)) text(c, "EN INICIO", x, y + 146f, mono, 18f, MUTED, a, .14f, Paint.Align.LEFT);
+            drawCellLabel(c, e.label, x, y, a);
+            if (marks && store.isPinned(e)) {
+                fill.setColor(e.accent | 0xFF000000);
+                fill.setAlpha((int) (255 * a));
+                c.drawCircle(x + cw - 14f, y + 18f, 7f, fill);
+            }
         }
         c.restore();
+        if (list.size() > 15) {
+            text(c, (idx + 1) + " / " + list.size(), 1808f, 1050f, medium, 26f, MUTED, 1f, 0f, Paint.Align.RIGHT);
+        }
+    }
+
+    /** Nombre de la app en una o dos líneas, sin cortarlo. */
+    private void drawCellLabel(Canvas c, String label, float x, float y, float a) {
+        final float maxW = 312f;
+        if (tw(label, bold, 46f, -.03f) <= maxW) {
+            text(c, label, x, y + 118f, bold, 46f, TXT, a, -.03f, Paint.Align.LEFT);
+            return;
+        }
+        String l1 = label, l2 = "";
+        int cut = -1;
+        for (int i = label.length() - 1; i > 0; i--) {
+            if (label.charAt(i) == ' ' && tw(label.substring(0, i), bold, 40f, -.03f) <= maxW) { cut = i; break; }
+        }
+        if (cut > 0) { l1 = label.substring(0, cut); l2 = label.substring(cut + 1); }
+        text(c, fit(l1, bold, 40f, -.03f, maxW), x, y + 82f, bold, 40f, TXT, a, -.03f, Paint.Align.LEFT);
+        if (!l2.isEmpty()) text(c, fit(l2, bold, 40f, -.03f, maxW), x, y + 128f, bold, 40f, TXT, a, -.03f, Paint.Align.LEFT);
     }
 
     private void drawEdit(Canvas c) {
@@ -855,7 +904,7 @@ final class LauncherView extends View {
             boolean chipOn = false;
             if (idx < n) { accent = store.pinned.get(idx).accent; label = store.pinned.get(idx).label; }
             else if (idx == n) { label = "+ Agregar app"; right = n >= AppStore.MAX_PINNED ? "Máximo " + AppStore.MAX_PINNED : null; }
-            else if (idx == n + 1) { label = "Restablecer lista"; right = "HBO Max · YouTube · Xuper · Netflix · Disney+"; }
+            else if (idx == n + 1) { label = "Restablecer lista"; right = null; }
             else if (idx == n + 2) { label = "Clima en inicio"; chipOn = store.weather; right = chipOn ? "Activado" : "Apagado"; }
             else if (idx == n + 3) { label = "Saludo según la hora"; chipOn = store.greeting; right = chipOn ? "Activado" : "Apagado"; }
             else { label = "Efecto de apertura"; chipOn = store.anim; right = chipOn ? "Activado" : "Apagado"; }
@@ -876,7 +925,7 @@ final class LauncherView extends View {
                     chip(c, "MOVER", x2 - 14f, y + 8f, editCol == 0);
                 }
             } else if (right != null) {
-                if (idx >= n + 2) chip(c, right.toUpperCase(Locale.ROOT), 1808f, y + 8f, chipOn && on);
+                if (idx >= n + 2) drawSwitch(c, 1808f - 88f, y + 4f, chipOn, a);
                 else text(c, right, 1808f, y + 44f, mono, 24f, SOFT, a, .08f, Paint.Align.RIGHT);
             }
         }
@@ -894,16 +943,24 @@ final class LauncherView extends View {
             fill.setAlpha(255);
             c.drawRoundRect(rect, 4f, 4f, fill);
         } else {
-            p.setShader(null);
-            p.setStyle(Paint.Style.STROKE);
-            p.setStrokeWidth(2f);
-            p.setColor(TXT);
-            p.setAlpha(90);
-            c.drawRoundRect(rect, 4f, 4f, p);
-            p.setStyle(Paint.Style.FILL);
+            fill.setColor(TXT);
+            fill.setAlpha(34);
+            c.drawRoundRect(rect, 4f, 4f, fill);
         }
         text(c, s, x + 18f, y + 34f, mono, 22f, filled ? 0xFF0A0A0B : TXT, 1f, .1f, Paint.Align.LEFT);
         return x;
+    }
+
+    /** Interruptor: el estado se ve por forma y relleno, sin depender del foco. */
+    private void drawSwitch(Canvas c, float x, float y, boolean on, float a) {
+        fill.setShader(null);
+        rect.set(x, y, x + 88f, y + 44f);
+        fill.setColor(TXT);
+        fill.setAlpha((int) (255 * a * (on ? 1f : .22f)));
+        c.drawRoundRect(rect, 22f, 22f, fill);
+        fill.setColor(on ? 0xFF0A0A0B : TXT);
+        fill.setAlpha((int) (255 * a * (on ? 1f : .75f)));
+        c.drawCircle(on ? x + 88f - 22f : x + 22f, y + 22f, 15f, fill);
     }
 
     private void drawToast(Canvas c) {
@@ -919,7 +976,13 @@ final class LauncherView extends View {
 
     // ---- utilidades de texto y color
 
+    private static final Locale ES = new Locale("es", "EC");
+
+    /** Decisión de diseño: todo el texto del launcher va en minúsculas. */
+    private static String lc(String s) { return s == null ? "" : s.toLowerCase(ES); }
+
     private void text(Canvas c, String s, float x, float y, Typeface tf, float size, int rgb, float alpha, float ls, Paint.Align al) {
+        s = lc(s);
         p.setShader(null);
         p.setStyle(Paint.Style.FILL);
         p.setTypeface(tf);
@@ -932,6 +995,7 @@ final class LauncherView extends View {
     }
 
     private void strokeText(Canvas c, String s, float x, float y, Typeface tf, float size, int rgb, float alpha, float ls) {
+        s = lc(s);
         p.setShader(null);
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeWidth(2f);
@@ -946,6 +1010,7 @@ final class LauncherView extends View {
     }
 
     private float tw(String s, Typeface tf, float size, float ls) {
+        s = lc(s);
         p.setStyle(Paint.Style.FILL);
         p.setTypeface(tf);
         p.setTextSize(size);
@@ -972,8 +1037,8 @@ final class LauncherView extends View {
     /** Desvanece la lista arriba y abajo, como la máscara de la maqueta. */
     private static float maskAt(float cy) {
         float f = cy / H;
-        if (f <= .14f) return 0f;
-        if (f < .34f) return (f - .14f) / .20f;
+        if (f <= .24f) return 0f;
+        if (f < .40f) return (f - .24f) / .16f;
         if (f <= .70f) return 1f;
         if (f < .86f) return (.86f - f) / .16f;
         return 0f;
