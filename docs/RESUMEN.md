@@ -71,6 +71,7 @@ Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, con foco ini
 | 0.1.17 | Prioridad 1000 en el filtro HOME del launcher (experimento para convivir con `launcherx` activo; el rol HOME ya lo tenía y no bastó). Resultado: Android deja la prioridad en 0 para apps que no son del sistema. |
 | 0.1.18 | BitChord (cliente de YouTube Music para TV, `com.music.bitchord.tv`): se agrega una sola vez al final de la lista del inicio cuando está instalado, con acento amarillo (FFD60A). |
 | 0.1.19 | Inicio y Atrás vuelven siempre a la primera app de la lista (ya no a YouTube), con recorrido de la rueda; regreso desde otra app con fundido suave (sin el relleno de color) y fundido más suave entre pantallas. Mini consola de multimedia entre el saludo y la fecha (portada, título, artista, progreso, anterior/play-pausa/siguiente); aparece al sonar algo y se esconde 10 min después de pausar; se enfoca con Arriba desde la primera app. Requiere activar una vez el acceso a notificaciones: `cmd notification allow_listener ec.josue.tvhome/ec.josue.tvhome.MediaListener` (reversa: `disallow_listener`). |
+| 0.1.20 | Consola: Izquierda tras «anterior» enfoca toda la consola (portada y textos) y OK abre la app que suena. Inicio desde la lista ya no da un brinco: `clampSelection` cancelaba el recorrido de la rueda al reanudar (el sistema pausa y reanuda el launcher al pulsar Inicio). |
 
 ## 6. Problemas encontrados y cómo se resolvieron
 

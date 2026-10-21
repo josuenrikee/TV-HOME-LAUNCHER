@@ -97,6 +97,7 @@ final class LauncherView extends View {
     private final Tween cFocus = new Tween();
     private boolean consoleTarget = false, consoleFocus = false, resumed = false;
     private int cBtn = 1;
+    private long lastPausedAt = 0L;
     private final MediaWatcher media;
     private final Path ctlPath = new Path();
     private final Matrix artMatrix = new Matrix();
@@ -173,6 +174,8 @@ final class LauncherView extends View {
             ret.set(0f);
             blink.set(1f);
             blink.to(0f, 520, smooth);
+        } else if (blink.v > .02f) {
+            blink.to(0f, 520, smooth);
         }
         resumed = true;
         media.start();
@@ -197,6 +200,7 @@ final class LauncherView extends View {
 
     void onPaused() {
         resumed = false;
+        lastPausedAt = SystemClock.uptimeMillis();
         media.stop();
         handler.removeCallbacks(progTick);
         handler.removeCallbacks(ticker);
@@ -208,7 +212,8 @@ final class LauncherView extends View {
         final int first = homeIndex();
         editMoving = false;
         if (consoleFocus) { consoleFocus = false; cFocus.to(0f, 200, LIN); }
-        if (!resumed || overlay != 0) {
+        boolean quick = resumed || SystemClock.uptimeMillis() - lastPausedAt < 700;
+        if (!quick || overlay != 0) {
             // Llega desde otra app: el estado queda listo detrás del fundido de entrada.
             screen = HOME;
             inApps = true;
@@ -314,8 +319,7 @@ final class LauncherView extends View {
 
     private void clampSelection() {
         int n = Math.max(1, store.pinned.size());
-        if (app > n - 1) app = n - 1;
-        focusPos.set(app);
+        if (app > n - 1) { app = n - 1; focusPos.set(app); }
         int total = store.pinned.size() + 5;
         if (editI > total - 1) editI = total - 1;
     }
@@ -402,13 +406,42 @@ final class LauncherView extends View {
 
     private void keyConsole(int k) {
         if (k == BACK || k == DOWN) { consoleFocus = false; cFocus.to(0f, 220, smooth); return; }
-        if (k == LEFT && cBtn > 0) cBtn--;
+        if (k == LEFT && cBtn > -1) cBtn--;
         else if (k == RIGHT && cBtn < 2) cBtn++;
         else if (k == OK || k == LONG) {
-            if (cBtn == 0) media.prev();
+            if (cBtn == -1) openPlayingApp();
+            else if (cBtn == 0) media.prev();
             else if (cBtn == 1) media.toggle();
             else media.next();
         }
+    }
+
+    /** Abre la app que está reproduciendo (BitChord, Spotify...) desde la consola. */
+    private void openPlayingApp() {
+        String pkg = media.pkg;
+        if (pkg == null || pkg.length() == 0) return;
+        Intent in = null;
+        for (AppEntry e : store.installed) {
+            if (e.pkg.equals(pkg)) { in = store.launchIntent(e); break; }
+        }
+        if (in == null) {
+            in = host.getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
+            if (in == null) in = host.getPackageManager().getLaunchIntentForPackage(pkg);
+            if (in != null) in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
+        if (in == null) { toast("No se pudo abrir la app"); return; }
+        final Intent fin = in;
+        lockUntil = SystemClock.uptimeMillis() + 500;
+        blink.to(1f, 190, smooth, new Runnable() {
+            @Override public void run() {
+                try {
+                    host.startActivity(fin);
+                } catch (Exception ex) {
+                    toast("No se pudo abrir la app");
+                    blink.to(0f, 300, smooth);
+                }
+            }
+        });
     }
 
     private void enterTool(int t) {
@@ -922,6 +955,21 @@ final class LauncherView extends View {
         if (ca < .004f) return;
         int ac = consoleAccent();
         final float x0 = 520f, cy = 150f, cs = 96f, cy0 = cy - cs / 2f;
+        // bloque completo enfocado: portada y textos como un solo botón (abre la app)
+        if (consoleFocus && cBtn == -1) {
+            rect.set(x0 - 16f, cy0 - 12f, 1004f, cy0 + cs + 12f);
+            fill.setShader(null);
+            fill.setColor(ac | 0xFF000000);
+            fill.setAlpha((int) (255 * ca * .12f));
+            c.drawRoundRect(rect, 22f, 22f, fill);
+            p.setShader(null);
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(3f);
+            p.setColor(ac | 0xFF000000);
+            p.setAlpha((int) (255 * ca));
+            c.drawRoundRect(rect, 22f, 22f, p);
+            p.setStyle(Paint.Style.FILL);
+        }
         // portada
         rect.set(x0, cy0, x0 + cs, cy0 + cs);
         android.graphics.Bitmap art = media.art;
