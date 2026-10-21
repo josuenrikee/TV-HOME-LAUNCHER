@@ -474,7 +474,7 @@ final class LauncherView extends View {
             TvInputManager tim = (TvInputManager) host.getSystemService(Context.TV_INPUT_SERVICE);
             if (tim == null) return;
             for (TvInputInfo info : tim.getTvInputList()) {
-                boolean tuner = info.getType() == TvInputInfo.TYPE_TUNER && info.isHardwareInput();
+                boolean tuner = info.getType() == TvInputInfo.TYPE_TUNER && info.getId().contains("/HW");
                 if (!info.isPassthroughInput() && !tuner) continue;
                 CharSequence nm = info.loadCustomLabel(host);
                 if (nm == null || nm.length() == 0) nm = info.loadLabel(host);
