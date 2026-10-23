@@ -101,6 +101,8 @@ final class LauncherView extends View {
     private boolean inputsFromApp = false;
     /** Atrás en Entradas mandó el launcher al fondo y falta dejar el inicio listo cuando la ventana ya no se vea. */
     private boolean homeResetPending = false;
+    /** Entradas se abrió con el botón del control (no con OK en la fila inferior). */
+    private boolean inputsFromKey = false;
     /**
      * Recuerda que la actividad estuvo parada (en segundo plano) desde el último onResume. En Android 14 el orden al volver del fondo es
      * onStart, onNewIntent, onResume; y con el launcher ya al frente es onPause, onNewIntent, onResume. Dentro de onNewIntent ni `resumed`
@@ -199,7 +201,6 @@ final class LauncherView extends View {
     // ------------------------------------------------------------------ ciclo de vida
 
     void onResumed() {
-        if (homeResetPending) settleHome();
         applyAlarmState();
         lastInput = SystemClock.uptimeMillis();
         if (restOn && SystemClock.uptimeMillis() - lastPausedAt > 1500) { restOn = false; rest.set(0f); }
@@ -284,6 +285,7 @@ final class LauncherView extends View {
     /** Se pulsó Inicio: siempre vuelve a la primera app de la lista, con suavidad. */
     void onHomePressed() {
         inputsFromApp = false;
+        inputsFromKey = false;
         if (overlay == 1) return;
         lastInput = SystemClock.uptimeMillis();
         if (restOn) leaveRest();
@@ -424,6 +426,7 @@ final class LauncherView extends View {
         }
         hdmiOpenedAt = SystemClock.uptimeMillis();
         inputsFromApp = wasStopped;
+        inputsFromKey = true;
         homeResetPending = false;
         lastInput = SystemClock.uptimeMillis();
         if (restOn) { restOn = false; rest.set(0f); }
@@ -635,6 +638,7 @@ final class LauncherView extends View {
     private void enterTool(int t) {
         if (t < 0 || t >= TOOLS.length) return;
         inputsFromApp = false;
+        inputsFromKey = false;
         String nm = TOOLS[t];
         if (nm.equals("Todas las apps")) { go(new Runnable() { @Override public void run() { screen = ALL; } }); }
         else if (nm.equals("Entradas")) { go(new Runnable() { @Override public void run() { loadInputs(); hdmiIdx = 0; screen = HDMI; hdmiOpenedAt = SystemClock.uptimeMillis(); } }); }
@@ -648,6 +652,7 @@ final class LauncherView extends View {
 
     private void backToHome(final int toolIdx) {
         inputsFromApp = false;
+        inputsFromKey = false;
         go(new Runnable() {
             @Override public void run() {
                 screen = HOME;
@@ -809,6 +814,7 @@ final class LauncherView extends View {
         if (inputsFromApp) {
             // Primero se esconde la ventana y, sin dibujar nada más, el estado queda listo en onStopped().
             inputsFromApp = false;
+            inputsFromKey = false;
             homeResetPending = true;
             host.moveTaskToBack(true);
             // por si el sistema no mandó el launcher al fondo (no hay otra tarea), no se queda atascado en Entradas
@@ -817,7 +823,18 @@ final class LauncherView extends View {
                     // si el launcher sigue al frente se repone el estado; si ya se escondió, lo hace onStopped()
                     if (homeResetPending && resumed) { settleHome(); invalidate(); }
                 }
-            }, 400);
+            }, 800);
+            return;
+        }
+        if (inputsFromKey) {
+            // Entradas se abrió con el botón del control desde el propio launcher: al cerrar vuelve a la lista de apps, con la primera enfocada.
+            inputsFromKey = false;
+            go(new Runnable() {
+                @Override public void run() {
+                    settleHome();
+                    clampSelection();
+                }
+            });
             return;
         }
         backToHome(1);
@@ -1063,6 +1080,7 @@ final class LauncherView extends View {
 
     private void switchInput(TvInputInfo info, String name) {
         inputsFromApp = false;
+        inputsFromKey = false;
         try {
             Uri u = info.isPassthroughInput() ? TvContract.buildChannelUriForPassthroughInput(info.getId())
                     : TvContract.Channels.CONTENT_URI;
