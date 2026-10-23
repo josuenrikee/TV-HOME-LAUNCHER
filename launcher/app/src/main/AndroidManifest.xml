@@ -61,6 +61,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Detalle personal del boton Prime Video. Tarea propia: al cerrarla se vuelve a la app anterior, sin pasar por el inicio. -->
+        <activity
+            android:name=".LoveActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:screenOrientation="landscape" />
+
         <activity
             android:name=".AlarmActivity"
             android:exported="false"

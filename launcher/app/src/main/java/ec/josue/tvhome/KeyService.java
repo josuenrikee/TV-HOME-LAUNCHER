@@ -21,7 +21,10 @@ import android.view.accessibility.AccessibilityEvent;
  * Los avisos de cambio de ventana se usan unicamente para detectar el menu de entradas de Realtek (paquete y clase), nada mas.
  *  - Engranaje: KEYCODE_NOTIFICATION (83) -> Ajustes del TV.
  *  - Entradas: KEYCODE_TV_INPUT (178) -> pantalla de entradas del launcher.
- *  - Botones de apps (codigos de Realtek): YouTube 3003, Netflix 3001, Prime Video 195, YouTube Music 3025.
+ *  - Botones de apps del control del ENVTECH U4K (medidos en el log TvHomeKeys):
+ *      Netflix 191 (KEYCODE_BUTTON_4), YouTube 190 (BUTTON_3), Disney 193 (BUTTON_6),
+ *      Prime Video 195 (BUTTON_8): no abre la app, que esta desactivada a proposito; abre un detalle personal (LoveActivity).
+ *  - Codigos de otro control (se conservan): YouTube 3003, Netflix 3001, YouTube Music 3025.
  */
 public class KeyService extends AccessibilityService {
     private static final String TAG = "TvHomeKeys";
@@ -75,11 +78,16 @@ public class KeyService extends AccessibilityService {
         super.onDestroy();
     }
 
+    /** Boton Prime Video del control: no abre la app, abre la pantalla personal. */
+    private static final int LOVE_CODE = 195;
+
     private static String pkgFor(int code) {
         switch (code) {
+            case 190:
             case 3003: return "com.google.android.youtube.tv";
+            case 191:
             case 3001: return "com.netflix.ninja";
-            case 195: return "com.amazon.amazonvideo.livingroom";
+            case 193: return "com.disney.disneyplus";
             case 3025: return "com.google.android.youtube.tvmusic";
             default: return null;
         }
@@ -89,20 +97,31 @@ public class KeyService extends AccessibilityService {
     private boolean handleCode(int code, boolean up) {
         Log.d(TAG, "tecla " + code + (up ? " up" : ""));
         String pkg = pkgFor(code);
-        if (pkg == null) return false;
+        if (pkg == null && code != LOVE_CODE) return false;
         long now = SystemClock.uptimeMillis();
         if (code == lastCode && now - lastLaunch < 1200) return true;
         lastCode = code;
         lastLaunch = now;
-        launchPackage(pkg);
+        if (code == LOVE_CODE) openLove();
+        else launchPackage(pkg);
         return true;
+    }
+
+    /** Abre la pantalla personal, salvo que este sonando una alarma (la alarma tiene prioridad). */
+    private void openLove() {
+        if (AlarmService.ringing) { Log.d(TAG, "alarma sonando: no se abre la pantalla personal"); return; }
+        try {
+            startActivity(new Intent(this, LoveActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (Exception e) {
+            Log.d(TAG, "no se pudo abrir la pantalla personal: " + e);
+        }
     }
 
     void launchPackage(String pkg) {
         try {
             Intent in = getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
             if (in == null) in = getPackageManager().getLaunchIntentForPackage(pkg);
-            if (in == null) return;
+            if (in == null) { Log.d(TAG, "no existe o esta desactivada: " + pkg); return; }
             if (pkg.contains("youtube.tv")) in.putExtra("yt_remote_button", true);
             startActivity(in.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (Exception e) {
@@ -116,7 +135,7 @@ public class KeyService extends AccessibilityService {
         boolean settings = code == KeyEvent.KEYCODE_NOTIFICATION;
         boolean inputs = code == KeyEvent.KEYCODE_TV_INPUT
             || (code >= KeyEvent.KEYCODE_TV_INPUT_HDMI_1 && code <= KeyEvent.KEYCODE_TV_INPUT_COMPOSITE_2);
-        boolean apps = pkgFor(code) != null;
+        boolean apps = pkgFor(code) != null || code == LOVE_CODE;
         Log.d(TAG, "onKeyEvent " + code + " accion " + event.getAction());
         if (!settings && !inputs && !apps) return false;
         if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
