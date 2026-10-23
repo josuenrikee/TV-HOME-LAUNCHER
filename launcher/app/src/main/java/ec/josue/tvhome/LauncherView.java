@@ -102,10 +102,11 @@ final class LauncherView extends View {
     /** Atrás en Entradas mandó el launcher al fondo y falta dejar el inicio listo cuando la ventana ya no se vea. */
     private boolean homeResetPending = false;
     /**
-     * true mientras la actividad está parada (en segundo plano). No cambia con la pausa temporal que hace el sistema al entregar un
-     * intent nuevo a la actividad que ya está al frente (onPause, onNewIntent, onResume), a diferencia de {@code resumed}.
+     * Recuerda que la actividad estuvo parada (en segundo plano) desde el último onResume. En Android 14 el orden al volver del fondo es
+     * onStart, onNewIntent, onResume; y con el launcher ya al frente es onPause, onNewIntent, onResume. Dentro de onNewIntent ni `resumed`
+     * ni un "parado ahora" distinguen los dos casos; esta marca sí, porque se limpia al final de onResumed().
      */
-    private boolean stopped = true;
+    private boolean wasStopped = false;
     /** Cuándo se abrió Entradas por última vez (antirrebote del botón). */
     private long hdmiOpenedAt = 0L;
     /** Tic suave al mover la selección por la lista de inicio. */
@@ -229,6 +230,7 @@ final class LauncherView extends View {
         handler.postDelayed(minuteTick, 60000L - (System.currentTimeMillis() % 60000L) + 40L);
         if (store.weather) weather.refreshIfStale(new Runnable() { @Override public void run() { invalidate(); } });
         invalidate();
+        wasStopped = false;
     }
 
     private void startCardLoad() {
@@ -253,13 +255,8 @@ final class LauncherView extends View {
 
     /** La ventana ya no se ve (lo llama onStop): ahora sí se puede dejar el inicio listo sin que se vea un fotograma. */
     void onStopped() {
-        stopped = true;
+        wasStopped = true;
         if (homeResetPending) settleHome();
-    }
-
-    /** La ventana volvió a ser visible. */
-    void onStarted() {
-        stopped = false;
     }
 
     /** Mientras el launcher se esconde tras Atrás en Entradas no se redibuja nada: así no se ve un fotograma del inicio. */
@@ -418,13 +415,15 @@ final class LauncherView extends View {
     /** Lo pide el servicio de teclas al pulsar Entradas/Fuentes del control, desde cualquier app. */
     void openInputsFromKey() {
         if (overlay == 1) return;
-        if (screen == HDMI && !stopped) {
+        android.util.Log.d("TvHomeKeys", "openInputsFromKey screen=" + screen + " wasStopped=" + wasStopped
+            + " resumed=" + resumed + " inputsFromApp(antes)=" + inputsFromApp);
+        if (screen == HDMI && !wasStopped) {
             // Entradas ya está abierta: pulsar el botón otra vez la cierra, como Atrás (con antirrebote para que un solo toque no abra y cierre).
             if (SystemClock.uptimeMillis() - hdmiOpenedAt >= 400) closeInputs();
             return;
         }
         hdmiOpenedAt = SystemClock.uptimeMillis();
-        inputsFromApp = stopped;
+        inputsFromApp = wasStopped;
         homeResetPending = false;
         lastInput = SystemClock.uptimeMillis();
         if (restOn) { restOn = false; rest.set(0f); }
