@@ -101,6 +101,11 @@ final class LauncherView extends View {
     private boolean inputsFromApp = false;
     /** Atrás en Entradas mandó el launcher al fondo y falta dejar el inicio listo cuando la ventana ya no se vea. */
     private boolean homeResetPending = false;
+    /**
+     * true mientras la actividad está parada (en segundo plano). No cambia con la pausa temporal que hace el sistema al entregar un
+     * intent nuevo a la actividad que ya está al frente (onPause, onNewIntent, onResume), a diferencia de {@code resumed}.
+     */
+    private boolean stopped = true;
     /** Cuándo se abrió Entradas por última vez (antirrebote del botón). */
     private long hdmiOpenedAt = 0L;
     /** Tic suave al mover la selección por la lista de inicio. */
@@ -248,7 +253,13 @@ final class LauncherView extends View {
 
     /** La ventana ya no se ve (lo llama onStop): ahora sí se puede dejar el inicio listo sin que se vea un fotograma. */
     void onStopped() {
+        stopped = true;
         if (homeResetPending) settleHome();
+    }
+
+    /** La ventana volvió a ser visible. */
+    void onStarted() {
+        stopped = false;
     }
 
     /** Mientras el launcher se esconde tras Atrás en Entradas no se redibuja nada: así no se ve un fotograma del inicio. */
@@ -407,13 +418,13 @@ final class LauncherView extends View {
     /** Lo pide el servicio de teclas al pulsar Entradas/Fuentes del control, desde cualquier app. */
     void openInputsFromKey() {
         if (overlay == 1) return;
-        if (screen == HDMI && resumed) {
+        if (screen == HDMI && !stopped) {
             // Entradas ya está abierta: pulsar el botón otra vez la cierra, como Atrás (con antirrebote para que un solo toque no abra y cierre).
             if (SystemClock.uptimeMillis() - hdmiOpenedAt >= 400) closeInputs();
             return;
         }
         hdmiOpenedAt = SystemClock.uptimeMillis();
-        inputsFromApp = !resumed;
+        inputsFromApp = stopped;
         homeResetPending = false;
         lastInput = SystemClock.uptimeMillis();
         if (restOn) { restOn = false; rest.set(0f); }

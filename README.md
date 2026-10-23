@@ -5,7 +5,7 @@ color de luz: al enfocar su nombre, el resplandor, la barra, el punto del saludo
 color de esa app. Incluye consola de música, reposo con reloj, alarmas y una lista que se edita desde el control remoto.
 
 Hecho para un **Innova 32″ con Google TV (Android 11, 1,5 GB de RAM)** y pensado para repetirse en otros TVs.
-Es un proyecto personal en versión 0.1.x (la última es la 0.1.34), todavía en pruebas.
+Es un proyecto personal en versión 0.1.x (la última es la 0.1.35), todavía en pruebas.
 
 ## Capturas
 

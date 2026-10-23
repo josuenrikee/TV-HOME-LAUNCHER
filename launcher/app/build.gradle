@@ -10,8 +10,8 @@ android {
         applicationId 'ec.josue.tvhome'
         minSdk 26
         targetSdk 34
-        versionCode 35
-        versionName '0.1.34'
+        versionCode 36
+        versionName '0.1.35'
     }
 
     // Llave fija y versionada: sin ella cada compilacion en CI genera una llave de depuracion nueva
