@@ -5,7 +5,7 @@ color de luz: al enfocar su nombre, el resplandor, la barra, el punto del saludo
 color de esa app. Incluye consola de música, reposo con reloj, alarmas y una lista que se edita desde el control remoto.
 
 Hecho para un **Innova 32″ con Google TV (Android 11, 1,5 GB de RAM)** y pensado para repetirse en otros TVs.
-Es un proyecto personal en versión 0.1.x (la última es la 0.1.30), todavía en pruebas.
+Es un proyecto personal en versión 0.1.x (la última es la 0.1.32), todavía en pruebas.
 
 ## Capturas
 
@@ -31,6 +31,7 @@ Capturas reales del TV (1280×720), tomadas con la versión 0.1.26. La pantalla 
 - **Color por app:** colores de marca conocidos y, para el resto, el color dominante del icono.
 - **Consola de música:** si una app (BitChord, Spotify, YouTube Music...) está reproduciendo, aparecen portada,
   título, artista, progreso y controles junto al saludo. OK sobre el bloque abre la app que suena. Se oculta a los 3 minutos en pausa.
+- **Sonidos al navegar:** un tic muy suave al moverte por la lista de inicio; sube de tono y baja de volumen cuanto más rápido avanzas. Se apaga o enciende en Editar lista.
 - **Reposo con reloj:** tras unos minutos sin tocar el control (apagado, 5, 10, 15, 30 o 60, se elige en Editar lista), la lista sale
   y el reloj se desliza al centro. Con música sonando, el reloj toma el color de la portada y aparecen portada, título y artista abajo a la izquierda.
   Cualquier tecla despierta sin ejecutar nada. El reloj se desplaza unos píxeles para no marcar el panel.

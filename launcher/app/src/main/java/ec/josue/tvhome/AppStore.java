@@ -33,6 +33,7 @@ final class AppStore {
     private static final String KEY_GREETING = "greeting";
     private static final String KEY_ANIM = "anim";
     private static final String KEY_REST = "rest_min";
+    private static final String KEY_SOUNDS = "sounds";
     static final int[] REST_OPTIONS = {0, 5, 10, 15, 30, 60};
 
     private static final int[] PALETTE = {
@@ -58,6 +59,8 @@ final class AppStore {
     boolean anim;
     /** Minutos sin tocar el control para pasar al reposo con reloj (0 = apagado). */
     int restMin;
+    /** Sonido suave al moverse por la lista de apps. */
+    boolean sounds;
 
     AppStore(Context ctx) {
         this.ctx = ctx;
@@ -67,6 +70,7 @@ final class AppStore {
         greeting = sp.getBoolean(KEY_GREETING, true);
         anim = sp.getBoolean(KEY_ANIM, true);
         restMin = sp.getInt(KEY_REST, 10);
+        sounds = sp.getBoolean(KEY_SOUNDS, true);
     }
 
     /** Vuelve a leer las apps instaladas y reconstruye la lista fijada (omite lo desinstalado o desactivado). */
@@ -173,6 +177,7 @@ final class AppStore {
 
     void setWeather(boolean v) { weather = v; sp.edit().putBoolean(KEY_WEATHER, v).apply(); }
     void setGreeting(boolean v) { greeting = v; sp.edit().putBoolean(KEY_GREETING, v).apply(); }
+    void setSounds(boolean v) { sounds = v; sp.edit().putBoolean(KEY_SOUNDS, v).apply(); }
     void setRestMin(int v) { restMin = v; sp.edit().putInt(KEY_REST, v).apply(); }
     void setAnim(boolean v) { anim = v; sp.edit().putBoolean(KEY_ANIM, v).apply(); }
 

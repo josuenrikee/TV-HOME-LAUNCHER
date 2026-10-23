@@ -97,6 +97,10 @@ final class LauncherView extends View {
     private final Tween consoleA = new Tween();
     private final Tween cFocus = new Tween();
     private boolean consoleTarget = false, consoleFocus = false, resumed = false;
+    /** Entradas se abrió con el botón del control mientras otra app estaba al frente: Atrás debe volver a esa app. */
+    private boolean inputsFromApp = false;
+    /** Tic suave al mover la selección por la lista de inicio. */
+    private final NavSound sfx;
     private int cBtn = 1;
     private long lastPausedAt = 0L;
     // --- reposo con reloj ---
@@ -160,6 +164,7 @@ final class LauncherView extends View {
         super(host);
         this.host = host;
         this.store = new AppStore(host);
+        this.sfx = new NavSound(host);
         this.weather = new Weather(host);
         this.media = new MediaWatcher(host, new Runnable() {
             @Override public void run() { syncConsole(); invalidate(); }
@@ -237,6 +242,7 @@ final class LauncherView extends View {
 
     /** Se pulsó Inicio: siempre vuelve a la primera app de la lista, con suavidad. */
     void onHomePressed() {
+        inputsFromApp = false;
         if (overlay == 1) return;
         lastInput = SystemClock.uptimeMillis();
         if (restOn) leaveRest();
@@ -368,6 +374,7 @@ final class LauncherView extends View {
     /** Lo pide el servicio de teclas al pulsar Entradas/Fuentes del control, desde cualquier app. */
     void openInputsFromKey() {
         if (overlay == 1) return;
+        inputsFromApp = !resumed;
         lastInput = SystemClock.uptimeMillis();
         if (restOn) { restOn = false; rest.set(0f); }
         editMoving = false;
@@ -436,7 +443,7 @@ final class LauncherView extends View {
     private void clampSelection() {
         int n = Math.max(1, store.pinned.size());
         if (app > n - 1) { app = n - 1; focusPos.set(app); }
-        int total = store.pinned.size() + 7;
+        int total = store.pinned.size() + 8;
         if (editI > total - 1) editI = total - 1;
     }
 
@@ -506,6 +513,8 @@ final class LauncherView extends View {
             if (app != first || Math.abs(focusPos.v - first) > .001f) { app = first; scrollWheelTo(first); }
             return;
         }
+        final int app0 = app, tool0 = tool;
+        final boolean inApps0 = inApps;
         if (inApps) {
             if (k == UP && app > 0) { app--; focusPos.to(app, 420, wheel); }
             else if (k == UP && consoleTarget && consoleA.v > .5f) {
@@ -525,6 +534,10 @@ final class LauncherView extends View {
             else if (k == RIGHT && tool < TOOLS.length - 1) tool++;
             else if (k == UP) { inApps = true; toolsDim.to(0f, 200, LIN); }
             else if (k == OK || k == LONG) enterTool(tool);
+        }
+        // sonido suave solo cuando la selección cambió de verdad (no al chocar con un extremo)
+        if (store.sounds && (app != app0 || tool != tool0 || inApps != inApps0)) {
+            sfx.tick((k == UP || k == LEFT) ? -1 : 1);
         }
     }
 
@@ -570,6 +583,7 @@ final class LauncherView extends View {
 
     private void enterTool(int t) {
         if (t < 0 || t >= TOOLS.length) return;
+        inputsFromApp = false;
         String nm = TOOLS[t];
         if (nm.equals("Todas las apps")) { go(new Runnable() { @Override public void run() { screen = ALL; } }); }
         else if (nm.equals("Entradas")) { go(new Runnable() { @Override public void run() { loadInputs(); hdmiIdx = 0; screen = HDMI; } }); }
@@ -582,6 +596,7 @@ final class LauncherView extends View {
     }
 
     private void backToHome(final int toolIdx) {
+        inputsFromApp = false;
         go(new Runnable() {
             @Override public void run() {
                 screen = HOME;
@@ -739,7 +754,22 @@ final class LauncherView extends View {
     }
 
     private void keyHdmi(int k) {
-        if (k == BACK) { backToHome(1); return; }
+        if (k == BACK) {
+            if (inputsFromApp) {
+                // Se abrió desde otra app: Atrás la revela de nuevo. El launcher queda listo, sin animar, para la próxima vez.
+                inputsFromApp = false;
+                screen = HOME;
+                inApps = true;
+                app = homeIndex();
+                focusPos.set(app);
+                toolsDim.set(0f);
+                invalidate();
+                host.moveTaskToBack(true);
+                return;
+            }
+            backToHome(1);
+            return;
+        }
         if (inputs.isEmpty()) return;
         if (k == UP && hdmiIdx > 0) hdmiIdx--;
         else if (k == DOWN && hdmiIdx < Math.min(inputs.size(), 5) - 1) hdmiIdx++;
@@ -748,7 +778,7 @@ final class LauncherView extends View {
 
     private void keyEdit(int k) {
         int n = store.pinned.size();
-        int last = n + 6;
+        int last = n + 7;
         if (k == BACK) {
             if (editMoving) { editMoving = false; return; }
             backToHome(2);
@@ -797,7 +827,10 @@ final class LauncherView extends View {
             else if (editI == n + 3) store.setGreeting(!store.greeting);
             else if (editI == n + 4) store.setAnim(!store.anim);
             else if (editI == n + 5) cycleRest(1, true);
-            else {
+            else if (editI == n + 7) {
+                store.setSounds(!store.sounds);
+                if (store.sounds) sfx.tick(1);
+            } else {
                 // función de alarma: al apagarla desaparece de la fila inferior y no se programa nada
                 AlarmStore.setFeature(host, !AlarmStore.feature(host));
                 applyAlarmState();
@@ -974,6 +1007,7 @@ final class LauncherView extends View {
     }
 
     private void switchInput(TvInputInfo info, String name) {
+        inputsFromApp = false;
         try {
             Uri u = info.isPassthroughInput() ? TvContract.buildChannelUriForPassthroughInput(info.getId())
                     : TvContract.Channels.CONTENT_URI;
@@ -1736,7 +1770,7 @@ final class LauncherView extends View {
         int n = store.pinned.size();
         c.save();
         c.clipRect(0f, 235f, W, 985f);
-        for (int idx = 0; idx < n + 7; idx++) {
+        for (int idx = 0; idx < n + 8; idx++) {
             float y = editRowTop(idx) - editScroll.v;
             if (y < 170f || y > 1000f) continue;
             boolean on = idx == editI;
@@ -1752,7 +1786,8 @@ final class LauncherView extends View {
             else if (idx == n + 3) { label = "Saludo según la hora"; chipOn = store.greeting; right = chipOn ? "Activado" : "Apagado"; }
             else if (idx == n + 4) { label = "Efecto de apertura"; chipOn = store.anim; right = chipOn ? "Activado" : "Apagado"; }
             else if (idx == n + 5) { label = "Reposo con reloj"; right = restLabel(store.restMin); }
-            else { label = "Alarma"; chipOn = AlarmStore.feature(host); right = chipOn ? "Activado" : "Apagado"; }
+            else if (idx == n + 6) { label = "Alarma"; chipOn = AlarmStore.feature(host); right = chipOn ? "Activado" : "Apagado"; }
+            else { label = "Sonidos al navegar"; chipOn = store.sounds; right = chipOn ? "Activado" : "Apagado"; }
             if (on) bar(c, 78f, y + 10f, accent, 8f, 44f);
             float tx = 112f;
             if (idx < n) {
