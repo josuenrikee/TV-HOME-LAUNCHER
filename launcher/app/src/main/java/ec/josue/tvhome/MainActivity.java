@@ -32,6 +32,12 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onStop() {
+        view.onStopped();
+        super.onStop();
+    }
+
+    @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         if (intent != null && intent.getBooleanExtra("inputs", false)) view.openInputsFromKey();

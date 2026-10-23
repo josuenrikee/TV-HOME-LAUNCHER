@@ -101,6 +101,8 @@ final class LauncherView extends View {
     private boolean inputsFromApp = false;
     /** Atrás en Entradas mandó el launcher al fondo y falta dejar el inicio listo cuando la ventana ya no se vea. */
     private boolean homeResetPending = false;
+    /** Cuándo se abrió Entradas por última vez (antirrebote del botón). */
+    private long hdmiOpenedAt = 0L;
     /** Tic suave al mover la selección por la lista de inicio. */
     private final NavSound sfx;
     private int cBtn = 1;
@@ -244,8 +246,25 @@ final class LauncherView extends View {
         toolsDim.set(0f);
     }
 
-    void onPaused() {
+    /** La ventana ya no se ve (lo llama onStop): ahora sí se puede dejar el inicio listo sin que se vea un fotograma. */
+    void onStopped() {
         if (homeResetPending) settleHome();
+    }
+
+    /** Mientras el launcher se esconde tras Atrás en Entradas no se redibuja nada: así no se ve un fotograma del inicio. */
+    @Override
+    public void invalidate() {
+        if (homeResetPending) return;
+        super.invalidate();
+    }
+
+    @Override
+    public void postInvalidate() {
+        if (homeResetPending) return;
+        super.postInvalidate();
+    }
+
+    void onPaused() {
         resumed = false;
         lastPausedAt = SystemClock.uptimeMillis();
         media.stop();
@@ -388,6 +407,12 @@ final class LauncherView extends View {
     /** Lo pide el servicio de teclas al pulsar Entradas/Fuentes del control, desde cualquier app. */
     void openInputsFromKey() {
         if (overlay == 1) return;
+        if (screen == HDMI && resumed) {
+            // Entradas ya está abierta: pulsar el botón otra vez la cierra, como Atrás (con antirrebote para que un solo toque no abra y cierre).
+            if (SystemClock.uptimeMillis() - hdmiOpenedAt >= 400) closeInputs();
+            return;
+        }
+        hdmiOpenedAt = SystemClock.uptimeMillis();
         inputsFromApp = !resumed;
         homeResetPending = false;
         lastInput = SystemClock.uptimeMillis();
@@ -481,6 +506,7 @@ final class LauncherView extends View {
             if (overlay != 0 || SystemClock.uptimeMillis() < lockUntil) return true;
             if (wantSettings) openSystemSettings();
             else if (screen != HDMI) enterTool(1);
+            else if (SystemClock.uptimeMillis() - hdmiOpenedAt >= 400) closeInputs();
             invalidate();
             return true;
         }
@@ -601,7 +627,7 @@ final class LauncherView extends View {
         inputsFromApp = false;
         String nm = TOOLS[t];
         if (nm.equals("Todas las apps")) { go(new Runnable() { @Override public void run() { screen = ALL; } }); }
-        else if (nm.equals("Entradas")) { go(new Runnable() { @Override public void run() { loadInputs(); hdmiIdx = 0; screen = HDMI; } }); }
+        else if (nm.equals("Entradas")) { go(new Runnable() { @Override public void run() { loadInputs(); hdmiIdx = 0; screen = HDMI; hdmiOpenedAt = SystemClock.uptimeMillis(); } }); }
         else if (nm.equals("Editar lista")) { go(new Runnable() { @Override public void run() { editI = 0; editCol = 0; editMoving = false; editScroll.set(0f); screen = EDIT; } }); }
         else if (nm.equals("Alarma")) { go(new Runnable() { @Override public void run() { openAlarms(); } }); }
         else if (nm.equals("Ajustes")) { openSystemSettings(); }
@@ -768,25 +794,27 @@ final class LauncherView extends View {
         }
     }
 
-    private void keyHdmi(int k) {
-        if (k == BACK) {
-            if (inputsFromApp) {
-                // Se abrió desde otra app: Atrás la revela de nuevo. Primero se esconde la ventana y, sin dibujar nada
-                // más (así no se ve un fotograma del inicio), el estado queda listo para la próxima vez en onPaused().
-                inputsFromApp = false;
-                homeResetPending = true;
-                host.moveTaskToBack(true);
-                // por si el sistema no mandó el launcher al fondo (no hay otra tarea), no se queda atascado en Entradas
-                handler.postDelayed(new Runnable() {
-                    @Override public void run() {
-                        if (homeResetPending) { settleHome(); invalidate(); }
-                    }
-                }, 400);
-                return;
-            }
-            backToHome(1);
+    /** Cierra Entradas: si se abrió desde otra app la revela de nuevo; si se abrió desde el launcher, vuelve al inicio. */
+    private void closeInputs() {
+        if (inputsFromApp) {
+            // Primero se esconde la ventana y, sin dibujar nada más, el estado queda listo en onStopped().
+            inputsFromApp = false;
+            homeResetPending = true;
+            host.moveTaskToBack(true);
+            // por si el sistema no mandó el launcher al fondo (no hay otra tarea), no se queda atascado en Entradas
+            handler.postDelayed(new Runnable() {
+                @Override public void run() {
+                    // si el launcher sigue al frente se repone el estado; si ya se escondió, lo hace onStopped()
+                    if (homeResetPending && resumed) { settleHome(); invalidate(); }
+                }
+            }, 400);
             return;
         }
+        backToHome(1);
+    }
+
+    private void keyHdmi(int k) {
+        if (k == BACK) { closeInputs(); return; }
         if (inputs.isEmpty()) return;
         if (k == UP && hdmiIdx > 0) hdmiIdx--;
         else if (k == DOWN && hdmiIdx < Math.min(inputs.size(), 5) - 1) hdmiIdx++;

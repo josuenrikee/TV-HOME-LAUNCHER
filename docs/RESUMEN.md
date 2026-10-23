@@ -86,6 +86,7 @@ Lista predeterminada: HBO Max, YouTube, Xuper TV, Netflix, Disney+, más BitChor
 | 0.1.31 | El contorno del texto de las apps no seleccionadas se dibuja con un Path de contornos unidos (con caché): en Android 14 la fuente variable mostraba el esqueleto de cada letra. |
 | 0.1.32 | Atrás en Entradas, abierta con el botón del control desde otra app, vuelve a esa app. Sonido suave al moverse por la lista de inicio, reactivo a la velocidad, con interruptor en Editar lista. |
 | 0.1.33 | En el ENVTECH U4K (Realtek, Android 14): si el menú de Entradas de Realtek sale encima del nuestro tras pulsar Entradas, el servicio de teclas lo detecta (paquete y clase, solo si pasaron menos de 2,5 s desde nuestro Entradas) y lo cierra con Atrás. Atrás en Entradas esconde el launcher sin dibujar el inicio antes. El receptor del servicio declara RECEIVER_EXPORTED en Android 13 o más. |
+| 0.1.34 | Atrás en Entradas esconde el launcher sin redibujar nada (el inicio se deja listo en onStop, no en onPause) para que no se vea un fotograma. Pulsar Entradas con la pantalla Entradas ya abierta la cierra, como Atrás (antirrebote de 400 ms), tanto si se abrió desde otra app como desde el launcher. |
 
 ## 6. Problemas encontrados y cómo se resolvieron
 
