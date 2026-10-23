@@ -5,7 +5,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
@@ -15,6 +18,7 @@ import android.view.accessibility.AccessibilityEvent;
 /**
  * Atiende los botones del control que el sistema no resuelve desde que el inicio de Google TV esta desactivado.
  * Solo filtra teclas y escucha el aviso GLOBAL_BUTTON de Realtek; no lee el contenido de la pantalla.
+ * Los avisos de cambio de ventana se usan unicamente para detectar el menu de entradas de Realtek (paquete y clase), nada mas.
  *  - Engranaje: KEYCODE_NOTIFICATION (83) -> Ajustes del TV.
  *  - Entradas: KEYCODE_TV_INPUT (178) -> pantalla de entradas del launcher.
  *  - Botones de apps (codigos de Realtek): YouTube 3003, Netflix 3001, Prime Video 195, YouTube Music 3025.
@@ -27,6 +31,9 @@ public class KeyService extends AccessibilityService {
     static volatile KeyService instance;
     private long lastLaunch = 0L;
     private int lastCode = -1;
+    /** Momento en que nuestro servicio atendio el boton Entradas (0 = ninguno pendiente). */
+    private long inputsPressedAt = 0L;
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
     private final BroadcastReceiver receiver = new BroadcastReceiver() {
         @Override
@@ -54,7 +61,8 @@ public class KeyService extends AccessibilityService {
             IntentFilter f = new IntentFilter();
             f.addAction(ACTION_GLOBAL);
             f.addAction(ACTION_LAUNCH);
-            registerReceiver(receiver, f);
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(receiver, f, Context.RECEIVER_EXPORTED);
+            else registerReceiver(receiver, f);
         } catch (Exception e) {
             Log.d(TAG, "no se pudo registrar: " + e);
         }
@@ -116,6 +124,7 @@ public class KeyService extends AccessibilityService {
                 if (settings) {
                     startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
                 } else if (inputs) {
+                    inputsPressedAt = SystemClock.uptimeMillis();
                     startActivity(new Intent(this, MainActivity.class).putExtra("inputs", true)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
                 } else {
@@ -128,7 +137,21 @@ public class KeyService extends AccessibilityService {
     }
 
     @Override
-    public void onAccessibilityEvent(AccessibilityEvent event) { }
+    public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (event == null || event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        CharSequence pkg = event.getPackageName();
+        CharSequence cls = event.getClassName();
+        if (pkg == null || cls == null) return;
+        if (!"com.realtek.tv".contentEquals(pkg) || !cls.toString().endsWith("SelectInputActivity")) return;
+        long t = inputsPressedAt;
+        // Solo si el menu de Realtek salio por culpa de nuestro Entradas (menos de ~2,5 s); si el usuario lo abrio de otra forma, no se toca.
+        if (t == 0L || SystemClock.uptimeMillis() - t > 2500) { Log.d(TAG, "menu Realtek abierto por otra via: no se toca"); return; }
+        inputsPressedAt = 0L;
+        Log.d(TAG, "menu de entradas de Realtek encima del nuestro: se cierra con Atras");
+        handler.postDelayed(new Runnable() {
+            @Override public void run() { performGlobalAction(GLOBAL_ACTION_BACK); }
+        }, 60);
+    }
 
     @Override
     public void onInterrupt() { }

@@ -99,6 +99,8 @@ final class LauncherView extends View {
     private boolean consoleTarget = false, consoleFocus = false, resumed = false;
     /** Entradas se abrió con el botón del control mientras otra app estaba al frente: Atrás debe volver a esa app. */
     private boolean inputsFromApp = false;
+    /** Atrás en Entradas mandó el launcher al fondo y falta dejar el inicio listo cuando la ventana ya no se vea. */
+    private boolean homeResetPending = false;
     /** Tic suave al mover la selección por la lista de inicio. */
     private final NavSound sfx;
     private int cBtn = 1;
@@ -189,6 +191,7 @@ final class LauncherView extends View {
     // ------------------------------------------------------------------ ciclo de vida
 
     void onResumed() {
+        if (homeResetPending) settleHome();
         applyAlarmState();
         lastInput = SystemClock.uptimeMillis();
         if (restOn && SystemClock.uptimeMillis() - lastPausedAt > 1500) { restOn = false; rest.set(0f); }
@@ -231,7 +234,18 @@ final class LauncherView extends View {
         }, "cards").start();
     }
 
+    /** Deja el inicio listo (primera app enfocada) sin animar ni dibujar. */
+    private void settleHome() {
+        homeResetPending = false;
+        screen = HOME;
+        inApps = true;
+        app = homeIndex();
+        focusPos.set(app);
+        toolsDim.set(0f);
+    }
+
     void onPaused() {
+        if (homeResetPending) settleHome();
         resumed = false;
         lastPausedAt = SystemClock.uptimeMillis();
         media.stop();
@@ -375,6 +389,7 @@ final class LauncherView extends View {
     void openInputsFromKey() {
         if (overlay == 1) return;
         inputsFromApp = !resumed;
+        homeResetPending = false;
         lastInput = SystemClock.uptimeMillis();
         if (restOn) { restOn = false; rest.set(0f); }
         editMoving = false;
@@ -756,15 +771,17 @@ final class LauncherView extends View {
     private void keyHdmi(int k) {
         if (k == BACK) {
             if (inputsFromApp) {
-                // Se abrió desde otra app: Atrás la revela de nuevo. El launcher queda listo, sin animar, para la próxima vez.
+                // Se abrió desde otra app: Atrás la revela de nuevo. Primero se esconde la ventana y, sin dibujar nada
+                // más (así no se ve un fotograma del inicio), el estado queda listo para la próxima vez en onPaused().
                 inputsFromApp = false;
-                screen = HOME;
-                inApps = true;
-                app = homeIndex();
-                focusPos.set(app);
-                toolsDim.set(0f);
-                invalidate();
+                homeResetPending = true;
                 host.moveTaskToBack(true);
+                // por si el sistema no mandó el launcher al fondo (no hay otra tarea), no se queda atascado en Entradas
+                handler.postDelayed(new Runnable() {
+                    @Override public void run() {
+                        if (homeResetPending) { settleHome(); invalidate(); }
+                    }
+                }, 400);
                 return;
             }
             backToHome(1);
