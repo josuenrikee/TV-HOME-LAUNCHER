@@ -1867,6 +1867,41 @@ final class LauncherView extends View {
         c.drawText(s, x, y, p);
     }
 
+    /** Contorno de una palabra ya unido: la fuente variable trae contornos solapados que, trazados uno a uno, dejan ver su esqueleto. */
+    private static final class OutlineEntry {
+        Path path;
+        float size;
+        float ls;
+        Typeface tf;
+    }
+
+    private final java.util.HashMap<String, OutlineEntry> outlineCache = new java.util.HashMap<>();
+    private final Paint outlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    /** Path de la palabra con los contornos unidos; se guarda en caché para no recalcularlo en cada cuadro. */
+    private Path outline(String s, Typeface tf, float size, float ls) {
+        OutlineEntry e = outlineCache.get(s);
+        if (e != null && e.size == size && e.ls == ls && e.tf == tf) return e.path;
+        if (outlineCache.size() > 200) outlineCache.clear();
+        Paint q = outlinePaint;
+        q.setStyle(Paint.Style.FILL);
+        q.setTypeface(tf);
+        q.setTextSize(size);
+        q.setLetterSpacing(ls);
+        q.setTextAlign(Paint.Align.LEFT);
+        Path raw = new Path();
+        q.getTextPath(s, 0, s.length(), 0f, 0f, raw);
+        Path merged = new Path();
+        Path use = merged.op(raw, raw, Path.Op.UNION) ? merged : raw;
+        if (e == null) e = new OutlineEntry();
+        e.path = use;
+        e.size = size;
+        e.ls = ls;
+        e.tf = tf;
+        outlineCache.put(s, e);
+        return use;
+    }
+
     private void strokeText(Canvas c, String s, float x, float y, Typeface tf, float size, int rgb, float alpha, float ls) {
         s = lc(s);
         p.setShader(null);
@@ -1878,7 +1913,10 @@ final class LauncherView extends View {
         p.setTextAlign(Paint.Align.LEFT);
         p.setColor(rgb | 0xFF000000);
         p.setAlpha(Math.max(0, Math.min(255, (int) (alpha * 255))));
-        c.drawText(s, x, y, p);
+        c.save();
+        c.translate(x, y);
+        c.drawPath(outline(s, tf, size, ls), p);
+        c.restore();
         p.setStyle(Paint.Style.FILL);
     }
 
